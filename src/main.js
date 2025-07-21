@@ -1,3 +1,8 @@
+import { Chart, registerables } from 'chart.js';
+import jsPDF from 'jspdf';
+
+Chart.register(...registerables);
+
 console.log("Main script loaded.");
 
 // This is a simplified stand-in for the Google AI SDK
@@ -160,7 +165,7 @@ function renderReport(title, summary, chartConfig) {
 // EVENT LISTENERS & WORKER
 // =================================
 
-const worker = new Worker('worker.js');
+const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
 
 worker.onmessage = function(event) {
   const { type, payload } = event.data;
@@ -202,7 +207,6 @@ exportPdfButton.addEventListener('click', () => {
     if (!chartInstance) return;
 
     updateProgress('Exporting to PDF...');
-    const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
     const title = document.getElementById('reportTitle').textContent;

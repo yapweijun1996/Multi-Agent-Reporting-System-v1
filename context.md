@@ -8,8 +8,10 @@ This project aims to build a **hybrid online/offline**, browser-based intelligen
 ---
 
 # System Architecture
-- **Development Stack**: The project will be built using **Vanilla HTML, CSS, and JavaScript**, with no dependency on Node.js or frameworks like React.
-- **Styling**: **Tailwind CSS (via Play CDN)** will be used for rapid, utility-first styling during development.
+- **Development Environment**: The project is built using **Vite** for a modern, fast development experience.
+- **Development Stack**: **Vanilla HTML, CSS, and JavaScript (ES Modules)**.
+- **Styling**: **Tailwind CSS** is used for utility-first styling.
+- **Dependencies**: Managed with `npm`.
 
 - **Frontend Browser Environment**
 - **Efficient Streaming Parsing**: Uses PapaParse with Web Workers to perform non-blocking streaming CSV parsing.
@@ -19,7 +21,14 @@ This project aims to build a **hybrid online/offline**, browser-based intelligen
 
 - **Multi-Agent AI System (Based on Google Gemini 2.5 Flash)**
 - **Conversational Workflow**: A single, continuous `ChatSession` is used. Each "agent" contributes to the conversation, building on the context from the previous steps to ensure a coherent and intelligent analysis.
-- **Core Intelligence Engine**: API calls to Google Gemini are managed through a simplified SDK-like structure in `main.js`.
+- **Core Intelligence Engine**: API calls to Google Gemini are managed through a simplified SDK-like structure in `src/main.js`.
+
+---
+
+# How to Run
+1.  Install dependencies: `npm install`
+2.  Run the development server: `npm run dev`
+3.  Open the provided local URL in your browser.
 
 ---
 
@@ -46,19 +55,16 @@ The analysis is performed by a pipeline of three agents working within a single 
 - **Task**: Writes a brief, insightful summary of the key findings from the analysis.
 - **Output**: A one-paragraph text summary.
 
-*(The User Interaction Agent is implicitly handled by the main application logic that orchestrates the pipeline.)*
-
 ---
 
 # Key Technologies and Optimizations
+- **Vite** for a modern development server and build process.
 - **Vanilla JavaScript (ES Modules)** for a lightweight, framework-free architecture.
-- **Tailwind CSS (Play CDN)** for utility-first styling.
+- **Tailwind CSS** for utility-first styling.
 - **Conversational AI (`startChat`)**: Ensures context is maintained throughout the multi-step analysis pipeline.
 - PapaParse with Web Worker for streaming CSV parsing.
-- IndexedDB for data storage.
 - Chart.js for interactive charts.
 - jsPDF with compressed JPEG chart images to reduce PDF file size.
-- Robust frontend state machine tracking each step from file upload to report completion.
 
 ---
 

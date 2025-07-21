@@ -1,5 +1,4 @@
-// Import PapaParse - this is a bit of a workaround for workers
-self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.2/papaparse.min.js');
+import Papa from 'papaparse';
 
 self.onmessage = function(event) {
   const file = event.data;
