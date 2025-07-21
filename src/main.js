@@ -1,6 +1,6 @@
 import { Chart, registerables } from 'chart.js';
 import jsPDF from 'jspdf';
-import { saveApiKey, loadApiKey } from './db.js';
+import { saveApiKey, loadApiKey, saveCsvData, loadCsvData } from './db.js';
 
 Chart.register(...registerables);
 
@@ -74,6 +74,9 @@ const csvFileInput = document.getElementById('csvFile');
 const progressContainer = document.getElementById('progress-container');
 const reportOutput = document.getElementById('report-output');
 const exportPdfButton = document.getElementById('exportPdf');
+const viewDataButton = document.getElementById('viewData');
+const dataViewer = document.getElementById('data-viewer');
+const dataTableContainer = document.getElementById('data-table-container');
 
 let csvData = [];
 let apiKey = '';
@@ -178,6 +181,15 @@ worker.onmessage = function(event) {
     csvData.push(...payload);
   } else if (type === 'complete') {
     updateProgress('CSV parsing complete!');
+    
+    // Save the parsed data to IndexedDB
+    saveCsvData(csvData)
+        .then(() => {
+            console.log('CSV data saved to IndexedDB.');
+            viewDataButton.classList.remove('hidden');
+        })
+        .catch(err => console.error('Failed to save CSV data:', err));
+
     runAnalysisPipeline(csvData);
   } else if (type === 'error') {
     updateProgress(`Error parsing file: ${payload.message}`, true);
@@ -207,6 +219,8 @@ csvFileInput.addEventListener('change', async (event) => {
   progressContainer.innerHTML = '';
   reportOutput.innerHTML = '<p class="text-gray-500">Report content will appear here once processing is complete.</p>';
   exportPdfButton.classList.add('hidden');
+  viewDataButton.classList.add('hidden');
+  dataViewer.classList.add('hidden');
   updateProgress(`Starting to process "${file.name}"...`);
 
   worker.postMessage(file);
@@ -262,4 +276,55 @@ function updateProgress(message, isError = false) {
   p.className = isError ? 'text-red-500 font-semibold' : 'text-gray-600';
   progressContainer.appendChild(p);
   progressContainer.scrollTop = progressContainer.scrollHeight;
+}
+
+viewDataButton.addEventListener('click', async () => {
+    try {
+        const data = await loadCsvData();
+        if (data && data.length > 0) {
+            renderDataTable(data);
+            dataViewer.classList.remove('hidden');
+        } else {
+            alert('No data available to display.');
+        }
+    } catch (error) {
+        console.error('Failed to load data for viewing:', error);
+        alert('Could not load data.');
+    }
+});
+
+function renderDataTable(data) {
+    const table = document.createElement('table');
+    table.className = 'min-w-full divide-y divide-gray-200';
+
+    const thead = document.createElement('thead');
+    thead.className = 'bg-gray-50';
+    const headerRow = document.createElement('tr');
+    const headers = Object.keys(data[0]);
+    headers.forEach(headerText => {
+        const th = document.createElement('th');
+        th.scope = 'col';
+        th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+        th.textContent = headerText;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    tbody.className = 'bg-white divide-y divide-gray-200';
+    data.forEach(rowData => {
+        const row = document.createElement('tr');
+        headers.forEach(header => {
+            const td = document.createElement('td');
+            td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
+            td.textContent = rowData[header];
+            row.appendChild(td);
+        });
+        tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+
+    dataTableContainer.innerHTML = '';
+    dataTableContainer.appendChild(table);
 }
