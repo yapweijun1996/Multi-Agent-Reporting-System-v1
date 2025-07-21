@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gemini AI Chatbox</title>
+    <link rel="manifest" href="./manifest-CjYNKvuc.json">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ua-parser-js/dist/ua-parser.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style rel="stylesheet" crossorigin>#chat-log::-webkit-scrollbar{width:8px}#chat-log::-webkit-scrollbar-track{background:#1e293b}#chat-log::-webkit-scrollbar-thumb{background:#475569;border-radius:4px}#chat-log::-webkit-scrollbar-thumb:hover{background:#64748b}textarea{resize:none;transition:height .2s ease-in-out}.prose{color:#e2e8f0}.prose h1,.prose h2,.prose h3,.prose h4,.prose h5,.prose h6{color:#f8fafc;margin-top:1.2em;margin-bottom:.6em}.prose a{color:#60a5fa;text-decoration:underline}.prose strong{color:#f1f5f9}.prose ul,.prose ol{margin-left:1.5rem}.prose li{margin-bottom:.25em}.prose blockquote{border-left:4px solid #475569;padding-left:1rem;margin-left:0;color:#94a3b8;font-style:italic}.prose pre{background-color:#282c34;border:1px solid #334155;border-radius:.5rem;padding:1rem;overflow-x:auto;font-size:.9em}.code-block-wrapper{position:relative;margin-top:1.2em;margin-bottom:1.2em}.prose code{background-color:#334155;color:#f1f5f9;border-radius:.25rem;padding:.1em .3em;font-size:.9em}.prose pre code{background-color:transparent;color:inherit;padding:0;font-size:inherit}.copy-button{position:sticky;top:.5rem;margin:0 7px -35px auto;background-color:#334155;color:#cbd5e1;border:1px solid #475569;border-radius:.375rem;padding:.25rem .5rem;font-size:.75rem;cursor:pointer;opacity:.5;transition:opacity .2s,background-color .2s,color .2s;display:flex;align-items:center;gap:.25rem;z-index:10}.code-block-wrapper:hover .copy-button{opacity:1}.copy-button:hover{background-color:#475569;color:#f1f5f9}#chat-form.drag-over{border-color:#60a5fa;background-color:#334155}</style>
+  <script type="module">(function(){const e=document.createElement("link").relList;if(e&&e.supports&&e.supports("modulepreload"))return;for(const n of document.querySelectorAll('link[rel="modulepreload"]'))t(n);new MutationObserver(n=>{for(const s of n)if(s.type==="childList")for(const a of s.addedNodes)a.tagName==="LINK"&&a.rel==="modulepreload"&&t(a)}).observe(document,{childList:!0,subtree:!0});function o(n){const s={};return n.integrity&&(s.integrity=n.integrity),n.referrerPolicy&&(s.referrerPolicy=n.referrerPolicy),n.crossOrigin==="use-credentials"?s.credentials="include":n.crossOrigin==="anonymous"?s.credentials="omit":s.credentials="same-origin",s}function t(n){if(n.ep)return;n.ep=!0;const s=o(n);fetch(n.href,s)}})();async function ie(e,o,t=10,n=20){return new Promise((s,a)=>{const r=new Image;r.src=`data:${o};base64,${e}`,r.onload=()=>{let i=1,c=0,m=e,h=r.width,g=r.height;const l=document.createElement("canvas"),d=l.getContext("2d");function f(){const y=Math.round(m.length*3/4/1024);if(y<=t||c>=n){console.log(`Final image size: ${y}KB after ${c} iterations.`),s(m);return}c++,i*=.7,h*=.7,g*=.7,l.width=h,l.height=g,d.drawImage(r,0,0,h,g),m=l.toDataURL(o,i).split(",")[1],setTimeout(f,0)}f()},r.onerror=i=>a(i)})}(function(){const e=document.createElement("link").relList;if(e&&e.supports&&e.supports("modulepreload"))return;for(const n of document.querySelectorAll('link[rel="modulepreload"]'))t(n);new MutationObserver(n=>{for(const s of n)if(s.type==="childList")for(const a of s.addedNodes)a.tagName==="LINK"&&a.rel==="modulepreload"&&t(a)}).observe(document,{childList:!0,subtree:!0});function o(n){const s={};return n.integrity&&(s.integrity=n.integrity),n.referrerPolicy&&(s.referrerPolicy=n.referrerPolicy),n.crossOrigin==="use-credentials"?s.credentials="include":n.crossOrigin==="anonymous"?s.credentials="omit":s.credentials="same-origin",s}function t(n){if(n.ep)return;n.ep=!0;const s=o(n);fetch(n.href,s)}})();const yt="GeminiChatDB",vt=2,de="settings",W="messages",V="memory";let I;function wt(){return new Promise((e,o)=>{const t=indexedDB.open(yt,vt);t.onerror=n=>o("Error opening DB"),t.onsuccess=n=>{I=n.target.result,e(I)},t.onupgradeneeded=n=>{const s=n.target.result;s.objectStoreNames.contains(de)||s.createObjectStore(de,{keyPath:"id"}),s.objectStoreNames.contains(W)||s.createObjectStore(W,{keyPath:"id",autoIncrement:!0}).createIndex("timestamp","timestamp",{unique:!1}),s.objectStoreNames.contains(V)||s.createObjectStore(V,{keyPath:"id",autoIncrement:!0})}})}function Et(e,o){return new Promise((t,n)=>{if(!I)return n("DB not open");const s=I.transaction([e],"readonly").objectStore(e).get(o);s.onsuccess=()=>t(s.result),s.onerror=()=>n(s.error)})}function Qe(e){return new Promise((o,t)=>{if(!I)return t("DB not open");const n=I.transaction([e],"readonly").objectStore(e).getAll();n.onsuccess=()=>o(n.result),n.onerror=()=>t(n.error)})}function ye(e,o){return new Promise((t,n)=>{if(!I)return n("DB not open");const s=I.transaction([e],"readwrite").objectStore(e).put(o);s.onsuccess=()=>t(s.result),s.onerror=()=>n(s.error)})}function Ze(e){return new Promise((o,t)=>{if(!I)return t("DB not open");const n=I.transaction([e],"readwrite").objectStore(e).clear();n.onsuccess=()=>o(),n.onerror=()=>t(n.error)})}async function k(e,o){const t=await Et(de,e);return t?t.value:o}async function S(e,o){await ye(de,{id:e,value:o})}async function ve(){return await Qe(W)}async function te(e){await ye(W,{...e,timestamp:new Date})}async function bt(){await Ze(W)}async function Ct(e){await ye(V,{...e,timestamp:new Date})}async function X(){return await Qe(V)}async function et(){await Ze(V)}const It='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-slate-400"><path fill-rule="evenodd" d="M18.685 19.097A9.723 9.723 0 0021.75 12c0-5.385-4.365-9.75-9.75-9.75S2.25 6.615 2.25 12a9.723 9.723 0 003.065 7.097A9.716 9.716 0 0012 21.75a9.716 9.716 0 006.685-2.653zm-12.54-1.285A7.486 7.486 0 0112 15a7.486 7.486 0 015.855 2.812A8.224 8.224 0 0112 20.25a8.224 8.224 0 01-5.855-2.438zM15.75 9a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" clip-rule="evenodd"></path></svg>',Ot='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-slate-400"><path fill-rule="evenodd" d="M4.5 3.75a3 3 0 00-3 3v10.5a3 3 0 003 3h15a3 3 0 003-3V6.75a3 3 0 00-3-3h-15zm4.125 3.375a.75.75 0 000 1.5h6.75a.75.75 0 000-1.5h-6.75zm0 3.75a.75.75 0 000 1.5h6.75a.75.75 0 000-1.5h-6.75zm0 3.75a.75.75 0 000 1.5h6.75a.75.75 0 000-1.5h-6.75z" clip-rule="evenodd"></path></svg>',Te='<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>',At='<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>',Tt='<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>';function we(e){e.scrollTop=e.scrollHeight}function Q(e,o){e.innerHTML=`<p><strong>Oops! Something went wrong.</strong></p><p>${o}</p>`,e.classList.remove("hidden")}function C(e,o,t,n,s){o.disabled=e,e?(n.classList.remove("hidden"),we(s)):(n.classList.add("hidden"),t.focus())}function tt(e){e.querySelectorAll("pre").forEach(o=>{var t;if((t=o.parentElement.parentElement)!=null&&t.classList.contains("code-block-wrapper"))return;const n=document.createElement("div");n.className="code-block-wrapper";const s=document.createElement("div");o.parentNode.insertBefore(n,o);const a=document.createElement("button");a.className="copy-button",a.innerHTML=`${Te} Copy`,a.addEventListener("click",()=>{var r;const i=((r=o.querySelector("code"))==null?void 0:r.innerText)||"";navigator.clipboard.writeText(i).then(()=>{a.innerHTML=`${At} Copied!`,setTimeout(()=>{a.innerHTML=`${Te} Copy`},2e3)}).catch(c=>{a.textContent="Failed!"})}),s.appendChild(o),n.appendChild(a),n.appendChild(s)})}function pe(e,o){const t=document.createElement("div");t.className="mt-4 pt-3 border-t border-slate-600",t.id=`sources-${o}`;const n=document.createElement("h4");n.className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1.5",n.innerHTML=`${Tt} Sources`,t.appendChild(n);const s=document.createElement("ul");return s.className="space-y-1.5",e.forEach(a=>{var r;if((r=a.web)!=null&&r.uri){const i=document.createElement("li"),c=document.createElement("a");c.href=a.web.uri,c.target="_blank",c.rel="noopener noreferrer",c.className="text-xs text-teal-400 hover:text-teal-300 hover:underline break-all",c.textContent=a.web.title||a.web.uri,i.appendChild(c),s.appendChild(i)}}),t.appendChild(s),t}function H(e,o,t=[]){const{role:n,text:s,image:a}=o,r=`message-${Date.now()}-${Math.random()}`,i=document.createElement("div");i.id=r,i.classList.add("flex","items-end","gap-2");const c=n==="user",m=c?"bg-blue-600 rounded-br-none":"bg-slate-700 rounded-bl-none";i.classList.add(c?"justify-end":"justify-start");const h=document.createElement("div");if(h.classList.add("px-4","py-3","rounded-2xl","text-white","prose",...m.split(" ")),h.style.maxWidth="85vw",a){const l=document.createElement("img"),d=a.compressed?a.compressed:a.original?a.original:a;l.src=d.base64.startsWith("data:")?d.base64:`data:${d.mimeType};base64,${d.base64}`,l.className="max-w-[200px] md:max-w-[256px] rounded-lg mb-2 cursor-pointer",l.draggable=!0,l.addEventListener("dragstart",f=>{const y=a.original?a.original:a;f.dataTransfer.setData("application/json",JSON.stringify(y))}),l.addEventListener("click",()=>{const f=document.getElementById("image-lightbox"),y=document.getElementById("lightbox-image"),se=document.getElementById("download-image-button"),P=a.original?a.original:a,ae=P.base64.startsWith("data:")?P.base64:`data:${P.mimeType};base64,${P.base64}`;y.src=ae,se.href=ae,se.download=`image-${Date.now()}.png`,f.classList.remove("hidden")}),h.appendChild(l)}if(s){const l=document.createElement("div");l.innerHTML=marked.parse(s),h.appendChild(l)}if(n==="model"&&t.length>0){const l=pe(t,r);h.appendChild(l)}const g=document.createElement("div");return g.classList.add("flex-shrink-0"),g.innerHTML=c?It:Ot,c?(i.appendChild(h),i.appendChild(g)):(i.appendChild(g),i.appendChild(h)),e.appendChild(i),tt(i),we(e),r}var Ne;(function(e){e.STRING="string",e.NUMBER="number",e.INTEGER="integer",e.BOOLEAN="boolean",e.ARRAY="array",e.OBJECT="object"})(Ne||(Ne={}));/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/var Se;(function(e){e.LANGUAGE_UNSPECIFIED="language_unspecified",e.PYTHON="python"})(Se||(Se={}));var _e;(function(e){e.OUTCOME_UNSPECIFIED="outcome_unspecified",e.OUTCOME_OK="outcome_ok",e.OUTCOME_FAILED="outcome_failed",e.OUTCOME_DEADLINE_EXCEEDED="outcome_deadline_exceeded"})(_e||(_e={}));/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/const xe=["user","model","function","system"];var Le;(function(e){e.HARM_CATEGORY_UNSPECIFIED="HARM_CATEGORY_UNSPECIFIED",e.HARM_CATEGORY_HATE_SPEECH="HARM_CATEGORY_HATE_SPEECH",e.HARM_CATEGORY_SEXUALLY_EXPLICIT="HARM_CATEGORY_SEXUALLY_EXPLICIT",e.HARM_CATEGORY_HARASSMENT="HARM_CATEGORY_HARASSMENT",e.HARM_CATEGORY_DANGEROUS_CONTENT="HARM_CATEGORY_DANGEROUS_CONTENT",e.HARM_CATEGORY_CIVIC_INTEGRITY="HARM_CATEGORY_CIVIC_INTEGRITY"})(Le||(Le={}));var Re;(function(e){e.HARM_BLOCK_THRESHOLD_UNSPECIFIED="HARM_BLOCK_THRESHOLD_UNSPECIFIED",e.BLOCK_LOW_AND_ABOVE="BLOCK_LOW_AND_ABOVE",e.BLOCK_MEDIUM_AND_ABOVE="BLOCK_MEDIUM_AND_ABOVE",e.BLOCK_ONLY_HIGH="BLOCK_ONLY_HIGH",e.BLOCK_NONE="BLOCK_NONE"})(Re||(Re={}));var ke;(function(e){e.HARM_PROBABILITY_UNSPECIFIED="HARM_PROBABILITY_UNSPECIFIED",e.NEGLIGIBLE="NEGLIGIBLE",e.LOW="LOW",e.MEDIUM="MEDIUM",e.HIGH="HIGH"})(ke||(ke={}));var Me;(function(e){e.BLOCKED_REASON_UNSPECIFIED="BLOCKED_REASON_UNSPECIFIED",e.SAFETY="SAFETY",e.OTHER="OTHER"})(Me||(Me={}));var J;(function(e){e.FINISH_REASON_UNSPECIFIED="FINISH_REASON_UNSPECIFIED",e.STOP="STOP",e.MAX_TOKENS="MAX_TOKENS",e.SAFETY="SAFETY",e.RECITATION="RECITATION",e.LANGUAGE="LANGUAGE",e.BLOCKLIST="BLOCKLIST",e.PROHIBITED_CONTENT="PROHIBITED_CONTENT",e.SPII="SPII",e.MALFORMED_FUNCTION_CALL="MALFORMED_FUNCTION_CALL",e.OTHER="OTHER"})(J||(J={}));var Pe;(function(e){e.TASK_TYPE_UNSPECIFIED="TASK_TYPE_UNSPECIFIED",e.RETRIEVAL_QUERY="RETRIEVAL_QUERY",e.RETRIEVAL_DOCUMENT="RETRIEVAL_DOCUMENT",e.SEMANTIC_SIMILARITY="SEMANTIC_SIMILARITY",e.CLASSIFICATION="CLASSIFICATION",e.CLUSTERING="CLUSTERING"})(Pe||(Pe={}));var $e;(function(e){e.MODE_UNSPECIFIED="MODE_UNSPECIFIED",e.AUTO="AUTO",e.ANY="ANY",e.NONE="NONE"})($e||($e={}));var De;(function(e){e.MODE_UNSPECIFIED="MODE_UNSPECIFIED",e.MODE_DYNAMIC="MODE_DYNAMIC"})(De||(De={}));/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/class w extends Error{constructor(o){super(`[GoogleGenerativeAI Error]: ${o}`)}}class D extends w{constructor(o,t){super(o),this.response=t}}class nt extends w{constructor(o,t,n,s){super(o),this.status=t,this.statusText=n,this.errorDetails=s}}class _ extends w{}class ot extends w{}/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/const Nt="https://generativelanguage.googleapis.com",St="v1beta",_t="0.24.1",xt="genai-js";var M;(function(e){e.GENERATE_CONTENT="generateContent",e.STREAM_GENERATE_CONTENT="streamGenerateContent",e.COUNT_TOKENS="countTokens",e.EMBED_CONTENT="embedContent",e.BATCH_EMBED_CONTENTS="batchEmbedContents"})(M||(M={}));class Lt{constructor(o,t,n,s,a){this.model=o,this.task=t,this.apiKey=n,this.stream=s,this.requestOptions=a}toString(){var o,t;const n=((o=this.requestOptions)===null||o===void 0?void 0:o.apiVersion)||St;let s=`${((t=this.requestOptions)===null||t===void 0?void 0:t.baseUrl)||Nt}/${n}/${this.model}:${this.task}`;return this.stream&&(s+="?alt=sse"),s}}function Rt(e){const o=[];return e!=null&&e.apiClient&&o.push(e.apiClient),o.push(`${xt}/${_t}`),o.join(" ")}async function kt(e){var o;const t=new Headers;t.append("Content-Type","application/json"),t.append("x-goog-api-client",Rt(e.requestOptions)),t.append("x-goog-api-key",e.apiKey);let n=(o=e.requestOptions)===null||o===void 0?void 0:o.customHeaders;if(n){if(!(n instanceof Headers))try{n=new Headers(n)}catch(s){throw new _(`unable to convert customHeaders value ${JSON.stringify(n)} to Headers: ${s.message}`)}for(const[s,a]of n.entries()){if(s==="x-goog-api-key")throw new _(`Cannot set reserved header name ${s}`);if(s==="x-goog-api-client")throw new _(`Header name ${s} can only be set using the apiClient field`);t.append(s,a)}}return t}async function Mt(e,o,t,n,s,a){const r=new Lt(e,o,t,n,a);return{url:r.toString(),fetchOptions:Object.assign(Object.assign({},Bt(a)),{method:"POST",headers:await kt(r),body:s})}}async function ne(e,o,t,n,s,a={},r=fetch){const{url:i,fetchOptions:c}=await Mt(e,o,t,n,s,a);return Pt(i,c,r)}async function Pt(e,o,t=fetch){let n;try{n=await t(e,o)}catch(s){$t(s,e)}return n.ok||await Dt(n,e),n}function $t(e,o){let t=e;throw t.name==="AbortError"?(t=new ot(`Request aborted when fetching ${o.toString()}: ${e.message}`),t.stack=e.stack):e instanceof nt||e instanceof _||(t=new w(`Error fetching from ${o.toString()}: ${e.message}`),t.stack=e.stack),t}async function Dt(e,o){let t="",n;try{const s=await e.json();t=s.error.message,s.error.details&&(t+=` ${JSON.stringify(s.error.details)}`,n=s.error.details)}catch{}throw new nt(`Error fetching from ${o.toString()}: [${e.status} ${e.statusText}] ${t}`,e.status,e.statusText,n)}function Bt(e){const o={};if((e==null?void 0:e.signal)!==void 0||(e==null?void 0:e.timeout)>=0){const t=new AbortController;(e==null?void 0:e.timeout)>=0&&setTimeout(()=>t.abort(),e.timeout),e!=null&&e.signal&&e.signal.addEventListener("abort",()=>{t.abort()}),o.signal=t.signal}return o}/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/function Ee(e){return e.text=()=>{if(e.candidates&&e.candidates.length>0){if(e.candidates.length>1&&console.warn(`This response had ${e.candidates.length} candidates. Returning text from the first candidate only. Access response.candidates directly to use the other candidates.`),ce(e.candidates[0]))throw new D(`${N(e)}`,e);return jt(e)}else if(e.promptFeedback)throw new D(`Text not available. ${N(e)}`,e);return""},e.functionCall=()=>{if(e.candidates&&e.candidates.length>0){if(e.candidates.length>1&&console.warn(`This response had ${e.candidates.length} candidates. Returning function calls from the first candidate only. Access response.candidates directly to use the other candidates.`),ce(e.candidates[0]))throw new D(`${N(e)}`,e);return console.warn("response.functionCall() is deprecated. Use response.functionCalls() instead."),Be(e)[0]}else if(e.promptFeedback)throw new D(`Function call not available. ${N(e)}`,e)},e.functionCalls=()=>{if(e.candidates&&e.candidates.length>0){if(e.candidates.length>1&&console.warn(`This response had ${e.candidates.length} candidates. Returning function calls from the first candidate only. Access response.candidates directly to use the other candidates.`),ce(e.candidates[0]))throw new D(`${N(e)}`,e);return Be(e)}else if(e.promptFeedback)throw new D(`Function call not available. ${N(e)}`,e)},e}function jt(e){var o,t,n,s;const a=[];if(!((t=(o=e.candidates)===null||o===void 0?void 0:o[0].content)===null||t===void 0)&&t.parts)for(const r of(s=(n=e.candidates)===null||n===void 0?void 0:n[0].content)===null||s===void 0?void 0:s.parts)r.text&&a.push(r.text),r.executableCode&&a.push("\n```"+r.executableCode.language+`
+`+r.executableCode.code+"\n```\n"),r.codeExecutionResult&&a.push("\n```\n"+r.codeExecutionResult.output+"\n```\n");return a.length>0?a.join(""):""}function Be(e){var o,t,n,s;const a=[];if(!((t=(o=e.candidates)===null||o===void 0?void 0:o[0].content)===null||t===void 0)&&t.parts)for(const r of(s=(n=e.candidates)===null||n===void 0?void 0:n[0].content)===null||s===void 0?void 0:s.parts)r.functionCall&&a.push(r.functionCall);if(a.length>0)return a}const Ht=[J.RECITATION,J.SAFETY,J.LANGUAGE];function ce(e){return!!e.finishReason&&Ht.includes(e.finishReason)}function N(e){var o,t,n;let s="";if((!e.candidates||e.candidates.length===0)&&e.promptFeedback)s+="Response was blocked",!((o=e.promptFeedback)===null||o===void 0)&&o.blockReason&&(s+=` due to ${e.promptFeedback.blockReason}`),!((t=e.promptFeedback)===null||t===void 0)&&t.blockReasonMessage&&(s+=`: ${e.promptFeedback.blockReasonMessage}`);else if(!((n=e.candidates)===null||n===void 0)&&n[0]){const a=e.candidates[0];ce(a)&&(s+=`Candidate was blocked due to ${a.finishReason}`,a.finishMessage&&(s+=`: ${a.finishMessage}`))}return s}function Z(e){return this instanceof Z?(this.v=e,this):new Z(e)}function Ft(e,o,t){if(!Symbol.asyncIterator)throw new TypeError("Symbol.asyncIterator is not defined.");var n=t.apply(e,o||[]),s,a=[];return s={},r("next"),r("throw"),r("return"),s[Symbol.asyncIterator]=function(){return this},s;function r(l){n[l]&&(s[l]=function(d){return new Promise(function(f,y){a.push([l,d,f,y])>1||i(l,d)})})}function i(l,d){try{c(n[l](d))}catch(f){g(a[0][3],f)}}function c(l){l.value instanceof Z?Promise.resolve(l.value.v).then(m,h):g(a[0][2],l)}function m(l){i("next",l)}function h(l){i("throw",l)}function g(l,d){l(d),a.shift(),a.length&&i(a[0][0],a[0][1])}}/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/const je=/^data\: (.*)(?:\n\n|\r\r|\r\n\r\n)/;function Ut(e){const o=e.body.pipeThrough(new TextDecoderStream("utf8",{fatal:!0})),t=Yt(o),[n,s]=t.tee();return{stream:Kt(n),response:Gt(s)}}async function Gt(e){const o=[],t=e.getReader();for(;;){const{done:n,value:s}=await t.read();if(n)return Ee(qt(o));o.push(s)}}function Kt(e){return Ft(this,arguments,function*(){const o=e.getReader();for(;;){const{value:t,done:n}=yield Z(o.read());if(n)break;yield yield Z(Ee(t))}})}function Yt(e){const o=e.getReader();return new ReadableStream({start(t){let n="";return s();function s(){return o.read().then(({value:a,done:r})=>{if(r){if(n.trim()){t.error(new w("Failed to parse stream"));return}t.close();return}n+=a;let i=n.match(je),c;for(;i;){try{c=JSON.parse(i[1])}catch{t.error(new w(`Error parsing JSON response: "${i[1]}"`));return}t.enqueue(c),n=n.substring(i[0].length),i=n.match(je)}return s()}).catch(a=>{let r=a;throw r.stack=a.stack,r.name==="AbortError"?r=new ot("Request aborted when reading from the stream"):r=new w("Error reading from the stream"),r})}}})}function qt(e){const o=e[e.length-1],t={promptFeedback:o==null?void 0:o.promptFeedback};for(const n of e){if(n.candidates){let s=0;for(const a of n.candidates)if(t.candidates||(t.candidates=[]),t.candidates[s]||(t.candidates[s]={index:s}),t.candidates[s].citationMetadata=a.citationMetadata,t.candidates[s].groundingMetadata=a.groundingMetadata,t.candidates[s].finishReason=a.finishReason,t.candidates[s].finishMessage=a.finishMessage,t.candidates[s].safetyRatings=a.safetyRatings,a.content&&a.content.parts){t.candidates[s].content||(t.candidates[s].content={role:a.content.role||"user",parts:[]});const r={};for(const i of a.content.parts)i.text&&(r.text=i.text),i.functionCall&&(r.functionCall=i.functionCall),i.executableCode&&(r.executableCode=i.executableCode),i.codeExecutionResult&&(r.codeExecutionResult=i.codeExecutionResult),Object.keys(r).length===0&&(r.text=""),t.candidates[s].content.parts.push(r)}s++}n.usageMetadata&&(t.usageMetadata=n.usageMetadata)}return t}/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/async function st(e,o,t,n){const s=await ne(o,M.STREAM_GENERATE_CONTENT,e,!0,JSON.stringify(t),n);return Ut(s)}async function at(e,o,t,n){const s=await(await ne(o,M.GENERATE_CONTENT,e,!1,JSON.stringify(t),n)).json();return{response:Ee(s)}}/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/function rt(e){if(e!=null){if(typeof e=="string")return{role:"system",parts:[{text:e}]};if(e.text)return{role:"system",parts:[e]};if(e.parts)return e.role?e:{role:"system",parts:e.parts}}}function ee(e){let o=[];if(typeof e=="string")o=[{text:e}];else for(const t of e)typeof t=="string"?o.push({text:t}):o.push(t);return zt(o)}function zt(e){const o={role:"user",parts:[]},t={role:"function",parts:[]};let n=!1,s=!1;for(const a of e)"functionResponse"in a?(t.parts.push(a),s=!0):(o.parts.push(a),n=!0);if(n&&s)throw new w("Within a single message, FunctionResponse cannot be mixed with other type of part in the request for sending chat message.");if(!n&&!s)throw new w("No content is provided for sending chat message.");return n?o:t}function Jt(e,o){var t;let n={model:o==null?void 0:o.model,generationConfig:o==null?void 0:o.generationConfig,safetySettings:o==null?void 0:o.safetySettings,tools:o==null?void 0:o.tools,toolConfig:o==null?void 0:o.toolConfig,systemInstruction:o==null?void 0:o.systemInstruction,cachedContent:(t=o==null?void 0:o.cachedContent)===null||t===void 0?void 0:t.name,contents:[]};const s=e.generateContentRequest!=null;if(e.contents){if(s)throw new _("CountTokensRequest must have one of contents or generateContentRequest, not both.");n.contents=e.contents}else if(s)n=Object.assign(Object.assign({},n),e.generateContentRequest);else{const a=ee(e);n.contents=[a]}return{generateContentRequest:n}}function He(e){let o;return e.contents?o=e:o={contents:[ee(e)]},e.systemInstruction&&(o.systemInstruction=rt(e.systemInstruction)),o}function Wt(e){return typeof e=="string"||Array.isArray(e)?{content:ee(e)}:e}/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/const Fe=["text","inlineData","functionCall","functionResponse","executableCode","codeExecutionResult"],Vt={user:["text","inlineData"],function:["functionResponse"],model:["text","functionCall","executableCode","codeExecutionResult"],system:["text"]};function Xt(e){let o=!1;for(const t of e){const{role:n,parts:s}=t;if(!o&&n!=="user")throw new w(`First content should be with role 'user', got ${n}`);if(!xe.includes(n))throw new w(`Each item should include role field. Got ${n} but valid roles are: ${JSON.stringify(xe)}`);if(!Array.isArray(s))throw new w("Content should have 'parts' property with an array of Parts");if(s.length===0)throw new w("Each Content should have at least one part");const a={text:0,inlineData:0,functionCall:0,functionResponse:0,fileData:0,executableCode:0,codeExecutionResult:0};for(const i of s)for(const c of Fe)c in i&&(a[c]+=1);const r=Vt[n];for(const i of Fe)if(!r.includes(i)&&a[i]>0)throw new w(`Content with role '${n}' can't contain '${i}' part`);o=!0}}function Ue(e){var o;if(e.candidates===void 0||e.candidates.length===0)return!1;const t=(o=e.candidates[0])===null||o===void 0?void 0:o.content;if(t===void 0||t.parts===void 0||t.parts.length===0)return!1;for(const n of t.parts)if(n===void 0||Object.keys(n).length===0||n.text!==void 0&&n.text==="")return!1;return!0}/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/const Ge="SILENT_ERROR";class Qt{constructor(o,t,n,s={}){this.model=t,this.params=n,this._requestOptions=s,this._history=[],this._sendPromise=Promise.resolve(),this._apiKey=o,n!=null&&n.history&&(Xt(n.history),this._history=n.history)}async getHistory(){return await this._sendPromise,this._history}async sendMessage(o,t={}){var n,s,a,r,i,c;await this._sendPromise;const m=ee(o),h={safetySettings:(n=this.params)===null||n===void 0?void 0:n.safetySettings,generationConfig:(s=this.params)===null||s===void 0?void 0:s.generationConfig,tools:(a=this.params)===null||a===void 0?void 0:a.tools,toolConfig:(r=this.params)===null||r===void 0?void 0:r.toolConfig,systemInstruction:(i=this.params)===null||i===void 0?void 0:i.systemInstruction,cachedContent:(c=this.params)===null||c===void 0?void 0:c.cachedContent,contents:[...this._history,m]},g=Object.assign(Object.assign({},this._requestOptions),t);let l;return this._sendPromise=this._sendPromise.then(()=>at(this._apiKey,this.model,h,g)).then(d=>{var f;if(Ue(d.response)){this._history.push(m);const y=Object.assign({parts:[],role:"model"},(f=d.response.candidates)===null||f===void 0?void 0:f[0].content);this._history.push(y)}else{const y=N(d.response);y&&console.warn(`sendMessage() was unsuccessful. ${y}. Inspect response object for details.`)}l=d}).catch(d=>{throw this._sendPromise=Promise.resolve(),d}),await this._sendPromise,l}async sendMessageStream(o,t={}){var n,s,a,r,i,c;await this._sendPromise;const m=ee(o),h={safetySettings:(n=this.params)===null||n===void 0?void 0:n.safetySettings,generationConfig:(s=this.params)===null||s===void 0?void 0:s.generationConfig,tools:(a=this.params)===null||a===void 0?void 0:a.tools,toolConfig:(r=this.params)===null||r===void 0?void 0:r.toolConfig,systemInstruction:(i=this.params)===null||i===void 0?void 0:i.systemInstruction,cachedContent:(c=this.params)===null||c===void 0?void 0:c.cachedContent,contents:[...this._history,m]},g=Object.assign(Object.assign({},this._requestOptions),t),l=st(this._apiKey,this.model,h,g);return this._sendPromise=this._sendPromise.then(()=>l).catch(d=>{throw new Error(Ge)}).then(d=>d.response).then(d=>{if(Ue(d)){this._history.push(m);const f=Object.assign({},d.candidates[0].content);f.role||(f.role="model"),this._history.push(f)}else{const f=N(d);f&&console.warn(`sendMessageStream() was unsuccessful. ${f}. Inspect response object for details.`)}}).catch(d=>{d.message!==Ge&&console.error(d)}),l}}/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/async function Zt(e,o,t,n){return(await ne(o,M.COUNT_TOKENS,e,!1,JSON.stringify(t),n)).json()}/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/async function en(e,o,t,n){return(await ne(o,M.EMBED_CONTENT,e,!1,JSON.stringify(t),n)).json()}async function tn(e,o,t,n){const s=t.requests.map(a=>Object.assign(Object.assign({},a),{model:o}));return(await ne(o,M.BATCH_EMBED_CONTENTS,e,!1,JSON.stringify({requests:s}),n)).json()}/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/class Ke{constructor(o,t,n={}){this.apiKey=o,this._requestOptions=n,t.model.includes("/")?this.model=t.model:this.model=`models/${t.model}`,this.generationConfig=t.generationConfig||{},this.safetySettings=t.safetySettings||[],this.tools=t.tools,this.toolConfig=t.toolConfig,this.systemInstruction=rt(t.systemInstruction),this.cachedContent=t.cachedContent}async generateContent(o,t={}){var n;const s=He(o),a=Object.assign(Object.assign({},this._requestOptions),t);return at(this.apiKey,this.model,Object.assign({generationConfig:this.generationConfig,safetySettings:this.safetySettings,tools:this.tools,toolConfig:this.toolConfig,systemInstruction:this.systemInstruction,cachedContent:(n=this.cachedContent)===null||n===void 0?void 0:n.name},s),a)}async generateContentStream(o,t={}){var n;const s=He(o),a=Object.assign(Object.assign({},this._requestOptions),t);return st(this.apiKey,this.model,Object.assign({generationConfig:this.generationConfig,safetySettings:this.safetySettings,tools:this.tools,toolConfig:this.toolConfig,systemInstruction:this.systemInstruction,cachedContent:(n=this.cachedContent)===null||n===void 0?void 0:n.name},s),a)}startChat(o){var t;return new Qt(this.apiKey,this.model,Object.assign({generationConfig:this.generationConfig,safetySettings:this.safetySettings,tools:this.tools,toolConfig:this.toolConfig,systemInstruction:this.systemInstruction,cachedContent:(t=this.cachedContent)===null||t===void 0?void 0:t.name},o),this._requestOptions)}async countTokens(o,t={}){const n=Jt(o,{model:this.model,generationConfig:this.generationConfig,safetySettings:this.safetySettings,tools:this.tools,toolConfig:this.toolConfig,systemInstruction:this.systemInstruction,cachedContent:this.cachedContent}),s=Object.assign(Object.assign({},this._requestOptions),t);return Zt(this.apiKey,this.model,n,s)}async embedContent(o,t={}){const n=Wt(o),s=Object.assign(Object.assign({},this._requestOptions),t);return en(this.apiKey,this.model,n,s)}async batchEmbedContents(o,t={}){const n=Object.assign(Object.assign({},this._requestOptions),t);return tn(this.apiKey,this.model,o,n)}}/**
+* @license
+* Copyright 2024 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/class oe{constructor(o){this.apiKey=o}getGenerativeModel(o,t){if(!o.model)throw new w("Must provide a model name. Example: genai.getGenerativeModel({ model: 'my-model-name' })");return new Ke(this.apiKey,o,t)}getGenerativeModelFromCachedContent(o,t,n){if(!o.name)throw new _("Cached content must contain a `name` field.");if(!o.model)throw new _("Cached content must contain a `model` field.");const s=["model","systemInstruction"];for(const r of s)if(t!=null&&t[r]&&o[r]&&(t==null?void 0:t[r])!==o[r]){if(r==="model"){const i=t.model.startsWith("models/")?t.model.replace("models/",""):t.model,c=o.model.startsWith("models/")?o.model.replace("models/",""):o.model;if(i===c)continue}throw new _(`Different value for "${r}" specified in modelParams (${t[r]}) and cachedContent (${o[r]})`)}const a=Object.assign(Object.assign({},t),{model:o.model,tools:o.tools,toolConfig:o.toolConfig,systemInstruction:o.systemInstruction,cachedContent:o});return new Ke(this.apiKey,a,n)}}function be(e){const o=e.match(/```json\n([\s\S]*?)\n```/);return o?o[1]:e}async function nn(e,o,t){let n=0;const s=e.length;let a=o;for(;n<s;){const r=e[a];console.log(`(Memory) Attempting to use API key #${a+1}`);try{const i=new oe(r).getGenerativeModel({model:"gemini-2.5-flash"}),c=`
+        You are a memory agent. Your task is to analyze the following conversation and extract key information to be stored in a long-term memory.
+        Extract facts, user preferences, and any other important details that should be remembered for future conversations.
+        Return ONLY the information as a valid JSON object with a single key "memory" which contains an array of strings.
+        If no new information is present, return an empty array.
+
+        Conversation:
+        ${JSON.stringify(t)}
+    `,m=(await(await i.generateContent(c)).response).text();return console.log(`(Memory) API key #${a+1} succeeded.`),JSON.parse(be(m)).memory}catch(i){console.warn(`(Memory) API key #${a+1} failed.`,i),n++,a=(a+1)%e.length,await S("currentKeyIndex",a)}}return console.error("All API keys failed for memory task."),[]}async function it(e,o){const t=await X();if(t.length<5)return;console.log("Consolidating memories...");let n=0;const s=e.length;let a=o;for(;n<s;){const r=e[a];console.log(`(Consolidation) Attempting to use API key #${a+1}`);try{const i=new oe(r).getGenerativeModel({model:"gemini-2.5-flash"}),c=`
+        You are a memory consolidation agent. Your task is to review the following list of memories and consolidate them into a more concise, organized, and coherent set of facts.
+        - **Merge related facts aggressively.** For example, "User likes dogs" and "User has a golden retriever" must become "User has a golden retriever dog."
+        - **Remove redundant or outdated information.** If a memory is a less specific version of another, delete it.
+        - **Eliminate meta-commentary.** Remove memories about the AI's own limitations or capabilities (e.g., "I cannot access personal information").
+        - **Rephrase memories to be clearer and more objective.**
+        - Return ONLY the consolidated information as a valid JSON object with a single key "consolidated_memories" which contains an array of strings.
+
+        Memories to consolidate:
+        ${JSON.stringify(t.map(g=>g.text))}
+    `,m=(await(await i.generateContent(c)).response).text(),h=JSON.parse(be(m)).consolidated_memories;return await et(),await Ce(h,!0),void console.log(`(Consolidation) API key #${a+1} succeeded.`)}catch(i){console.warn(`(Consolidation) API key #${a+1} failed.`,i),n++,a=(a+1)%e.length,await S("currentKeyIndex",a)}}console.error("All API keys failed for memory consolidation.")}async function Ce(e,o=!1){const t=await X(),n=new Set(t.map(r=>r.text.trim().toLowerCase())),s=e.filter(r=>{const i=r.trim().toLowerCase();return n.has(i)?!1:(n.add(i),!0)});for(const r of s)await Ct({text:r});const a=await k("enableMemoryDefrag",!0);!o&&a&&s.length>0&&t.length>0&&t.length%5==0&&setTimeout(()=>it(T,F),1e3)}async function on(e,o,t){const n=await X();if(n.length===0)return[];let s=0;const a=e.length;let r=o;for(;s<a;){const i=e[r];console.log(`(Retrieval) Attempting to use API key #${r+1}`);try{const c=new oe(i).getGenerativeModel({model:"gemini-2.5-flash"}),m=`
+        You are a retrieval agent. Your task is to select the most relevant memories from the following list to help answer the user's query.
+        - Analyze the user's query to understand its intent, even if it is vague. For example, a query like "what about my car" should be interpreted as a request for any stored information about their car.
+        - Return ONLY the most relevant memories as a valid JSON object with a single key "relevant_memories" which contains an array of strings.
+        - If no memories are relevant, or if the query is a simple greeting, return an empty array.
+        - Do not return more than 5 memories.
+
+        Memories:
+        ${JSON.stringify(n.map(g=>g.text))}
+
+        Query:
+        ${t}
+    `,h=(await(await c.generateContent(m)).response).text();return console.log(`(Retrieval) API key #${r+1} succeeded.`),JSON.parse(be(h)).relevant_memories}catch(c){console.warn(`(Retrieval) API key #${r+1} failed.`,c),s++,r=(r+1)%e.length,await S("currentKeyIndex",r)}}return console.error("All API keys failed for memory retrieval."),[]}async function sn(e,o){try{const t=[...await ve(),{role:"user",parts:[{text:e}]},{role:"model",parts:[{text:o}]}].map(s=>s.image&&s.image.original?{...s,image:{compressed:s.image.compressed}}:s),n=await nn(T,F,t);await Ce(n)}catch(t){console.error("Error in background memory task:",t)}}async function an(e,o=null,t,n,s){var a,r,i;let c=0;const m=t.length;for(;c<m;){const h=t[n];console.log(`Attempting to use API key #${n+1}`);try{const g=new oe(h),l=await k("modelName","gemini-2.5-flash");let d=(await ve()).map(v=>{const K=[];if(v.text&&K.push({text:v.text}),v.image&&v.role==="user"){const Y=v.image.compressed?v.image.compressed:v.image;K.push({inlineData:{mimeType:Y.mimeType,data:Y.base64}})}return{role:v.role,parts:K}}).filter(v=>v.parts.length>0);const f=d.findIndex(v=>v.role==="user");f>-1?d=d.slice(f):d=[];const y=new UAParser().getResult(),se=`${y.os.name} ${y.os.version}`,P=`${y.browser.name} ${y.browser.version}`,ae=new Date,ut=Intl.DateTimeFormat().resolvedOptions().timeZone,mt=ae.toLocaleString(),Ie=await on(t,n,e);let Oe="";Ie.length>0&&(Oe=`Here are some relevant memories from past conversations:
+           ${Ie.join(`
+`)}`);const ht=`You are a helpful and friendly conversational AI. Your name is Gemini.
+           When the user asks for information that may be recent or requires up-to-date knowledge (like current events, specific product details, or exchange rates), you MUST use the Google Search tool to find the answer. Do not tell the user what you *would* find; perform the search and provide the information directly, citing your sources when available.
+           Current user context:
+           - OS: ${se}
+           - Browser: ${P}
+           - Current Time: ${mt}
+           - Timezone: ${ut}
+           
+           ${Oe}
+
+           Always format your responses using Markdown. For code, use language-specific code blocks.`,gt=g.getGenerativeModel({model:l,systemInstruction:ht,tools:[{googleSearch:{}}]}).startChat({history:d.slice(0,-1)}),me=[];e&&me.push(e),o&&me.push({inlineData:{mimeType:o.mimeType,data:o.base64}});const ft=await gt.sendMessageStream(me);console.log(`API key #${n+1} succeeded.`);let L,U="",G=[];for await(const v of ft.stream){const K=v.text();U+=K;const Y=((i=(r=(a=v.candidates)==null?void 0:a[0])==null?void 0:r.groundingMetadata)==null?void 0:i.groundingChunks)??[];Y.length>0&&Y.forEach(R=>{var re;(re=R.web)!=null&&re.uri&&!G.some($=>$.web.uri===R.web.uri)&&G.push(R)}),L||(L=H(s,{role:"model",text:"..."}));const Ae=document.getElementById(L);if(Ae){const R=Ae.querySelector(".prose div");R&&(R.innerHTML=marked.parse(U+" ▋"));const re=R.parentElement;let $=document.getElementById(`sources-${L}`);if(G.length>0)if(!$)$=pe(G,L),re.appendChild($);else{const pt=pe(G,L);$.replaceWith(pt)}we(s)}}const he=document.getElementById(L);if(he){const v=he.querySelector(".prose div");v&&(v.innerHTML=marked.parse(U)),tt(he)}return await te({role:"model",text:U}),U}catch(g){console.warn(`API key #${n+1} failed.`,g),c++,n=(n+1)%t.length,await S("currentKeyIndex",n)}}throw new Error("All API keys failed. Please check your keys in the settings.")}async function rn(e,o,t,n){let s=0;const a=o.length;for(;s<a;){const r=o[t];console.log(`Attempting to use API key #${t+1}`);try{const i=await(await new oe(r).getGenerativeModel({model:"gemini-2.0-flash-preview-image-generation",generationConfig:{responseModalities:["Text","Image"]}}).generateContent(e)).response;console.log(`API key #${t+1} succeeded.`);const c=i.candidates[0].content.parts.find(d=>d.inlineData);if(!c)throw new Error("The AI response did not contain an image. Please try a different prompt.");const m=c.inlineData.data,h=c.inlineData.mimeType,g=await ie(m,h,10),l={role:"model",text:`Generated image for: "${e}"`,image:{original:{base64:m,mimeType:h},compressed:{base64:g,mimeType:h}}};return H(n,l),await te(l),l}catch(i){console.warn(`API key #${t+1} failed.`,i),s++,t=(t+1)%o.length,await S("currentKeyIndex",t)}}throw new Error("All API keys failed for image generation. Please check your keys in the settings.")}const ue="your-super-secret-key";let p,O,u,E,b,x,cn,Ye,q,le,ln,dn,ge,ct,B,j,qe,ze,z,un,mn,fe,Je,hn,gn,fn,pn,We,Ve,yn,Xe,vn,T=[],F=0,A=null;async function wn(){if(T.length===0)return;const e=lt(u.value);if(!e.trim())return;C(!0,E,u,b,p),x.classList.add("hidden");const o={role:"user",text:`Generate an image of: ${e.trim()}`};H(p,o),await te(o),u.value="",u.style.height="auto",u.placeholder="Type your message or add an image...";try{const t=await rn(o.text,T,F,p);C(!1,E,u,b,p)}catch(t){Q(x,t.message),C(!1,E,u,b,p)}}function lt(e){return e.replace(/&/g,"&").replace(/</g,"<").replace(/>/g,">").replace(/"/g,'"').replace(/'/g,"&#039;")}function En(e){let o="";for(let t=0;t<e.length;t++)o+=String.fromCharCode(e.charCodeAt(t)^ue.charCodeAt(t%ue.length));return btoa(o)}function dt(e){let o="";const t=atob(e);for(let n=0;n<t.length;n++)o+=String.fromCharCode(t.charCodeAt(n)^ue.charCodeAt(n%ue.length));return o}async function bn(e){if(e.preventDefault(),T.length===0)return;const o=lt(u.value);if(!o.trim()&&!A)return;C(!0,E,u,b,p),x.classList.add("hidden");const t={role:"user",text:o.trim()};A&&(t.image=A),H(p,t),await te(t),u.value="",u.style.height="auto",u.placeholder="Type your message or add an image...",A&&(A=null,z.value="",B.classList.add("hidden"),j.src="");try{const n=await an(t.text,t.image?t.image.original:null,T,F,p);C(!1,E,u,b,p),setTimeout(()=>sn(t.text,n),0)}catch(n){Q(x,n.message),C(!1,E,u,b,p)}}async function Cn(){C(!0,E,u,b,p),u.placeholder="Initializing...";const e=await k("apiKeys",[]);F=await k("currentKeyIndex",0);const o=await k("modelName","gemini-2.5-flash");if(e.length===0){Q(x,"No API Keys found. Please add your key(s) in the settings."),C(!0,E,u,b,p),u.placeholder="Please set API Key(s) in Settings.",q.classList.remove("hidden"),le.focus();return}T=e.map(dt);try{const t=await ve();if(p.innerHTML="",t.forEach(n=>H(p,n)),ct.textContent=o,t.length===0){const n={role:"model",text:`Hello! I am Gemini, your personal AI assistant. Loaded ${T.length} API key(s). Your chat history will be saved. How can I help you today?`};H(p,n),await te(n)}C(!1,E,u,b,p),u.placeholder="Type your message..."}catch(t){const n=t instanceof Error?t.message:"An unknown error occurred during initialization.";Q(x,`Initialization failed: ${n}.`),C(!0,E,u,b,p),u.placeholder="Application is disabled."}}async function In(){try{p=document.getElementById("chat-log"),O=document.getElementById("chat-form"),u=document.getElementById("chat-input"),E=document.getElementById("send-button"),b=document.getElementById("typing-indicator"),x=document.getElementById("error-message"),cn=document.getElementById("settings-button"),Ye=document.getElementById("clear-chat-button"),q=document.getElementById("settings-modal"),le=document.getElementById("api-key-input"),ln=document.getElementById("save-settings-button"),dn=document.getElementById("cancel-settings-button"),ge=document.getElementById("model-select"),ct=document.getElementById("current-model"),B=document.getElementById("image-preview-container"),j=document.getElementById("image-preview"),qe=document.getElementById("remove-image-button"),ze=document.getElementById("attach-file-button"),z=document.getElementById("file-input"),un=document.getElementById("clear-memory-button"),mn=document.getElementById("view-memory-button"),fe=document.getElementById("memory-modal"),Je=document.getElementById("memory-content"),hn=document.getElementById("close-memory-modal-button"),gn=document.getElementById("import-memory-button"),fn=document.getElementById("export-memory-button"),pn=document.getElementById("optimize-memory-button"),We=document.getElementById("generate-image-button"),Ve=document.getElementById("image-lightbox"),yn=document.getElementById("lightbox-image"),Xe=document.getElementById("close-lightbox-button"),vn=document.getElementById("download-image-button"),await wt(),O.addEventListener("submit",bn),ze.addEventListener("click",()=>z.click()),We.addEventListener("click",wn),Xe.addEventListener("click",()=>{Ve.classList.add("hidden")}),Ye.addEventListener("click",async()=>{confirm("Are you sure you want to clear the entire chat history? This cannot be undone.")&&(await bt(),location.reload())}),z.addEventListener("change",e=>{const o=e.target.files[0];if(o&&o.type.startsWith("image/")){const t=new FileReader;t.onloadend=async()=>{const n=t.result.split(",")[1],s=await ie(n,o.type,10);A={original:{base64:n,mimeType:o.type},compressed:{base64:s,mimeType:o.type}},j.src=t.result,B.classList.remove("hidden"),u.placeholder="Describe the image or ask a question..."},t.readAsDataURL(o)}e.target.value=""}),qe.addEventListener("click",()=>{A=null,z.value="",B.classList.add("hidden"),j.src="",u.placeholder="Type your message or add an image..."}),u.addEventListener("keydown",e=>{e.key==="Enter"&&!e.shiftKey&&(e.preventDefault(),E.disabled||O.dispatchEvent(new Event("submit",{cancelable:!0,bubbles:!0})))}),O.addEventListener("dragover",e=>{e.preventDefault(),O.classList.add("drag-over")}),O.addEventListener("dragleave",()=>{O.classList.remove("drag-over")}),O.addEventListener("drop",async e=>{e.preventDefault(),O.classList.remove("drag-over");const o=e.dataTransfer.files[0],t=e.dataTransfer.getData("application/json");if(o&&o.type.startsWith("image/")){const n=new FileReader;n.onloadend=async()=>{const s=n.result.split(",")[1],a=await ie(s,o.type,10);A={original:{base64:s,mimeType:o.type},compressed:{base64:a,mimeType:o.type}},j.src=n.result,B.classList.remove("hidden"),u.placeholder="Describe the image or ask a question..."},n.readAsDataURL(o)}else if(t)try{const{base64:n,mimeType:s}=JSON.parse(t),a=await ie(n,s,10);A={original:{base64:n,mimeType:s},compressed:{base64:a,mimeType:s}},j.src=`data:${s};base64,${n}`,B.classList.remove("hidden"),u.placeholder="Describe the image or ask a question..."}catch(n){console.error("Failed to handle dropped image data:",n)}}),u.addEventListener("input",()=>{u.style.height="auto";const e=Math.min(u.scrollHeight,200);u.style.height=e+"px"}),document.addEventListener("click",async e=>{const o=e.target.closest("button");if(o)switch(o.id){case"settings-button":{const s=await k("apiKeys",[]);le.value=s.map(dt).join(`
+`),ge.value=await k("modelName","gemini-2.5-flash"),q.classList.remove("hidden");break}case"cancel-settings-button":q.classList.add("hidden");break;case"save-settings-button":{const s=le.value.split(`
+`).map(a=>a.trim()).filter(a=>a);if(s.length>0){const a=s.map(En);await S("apiKeys",a),await S("modelName",ge.value),await S("currentKeyIndex",0),q.classList.add("hidden"),location.reload()}else alert("API Key(s) cannot be empty.");break}case"view-memory-button":{const s=await X();Je.innerHTML=s.length===0?'<p class="text-slate-400">No memories found.</p>':s.map(a=>`<div class="p-2 border-b border-slate-700">${a.text}</div>`).join(""),fe.classList.remove("hidden");break}case"clear-memory-button":confirm("Are you sure you want to clear the AI's memory? This cannot be undone.")&&(await et(),alert("AI memory has been cleared."));break;case"close-memory-modal-button":fe.classList.add("hidden");break;case"export-memory-button":{const s=await X(),a={version:1,timestamp:new Date().toISOString(),memories:s.map(m=>m.text)},r=new Blob([JSON.stringify(a,null,2)],{type:"application/json"}),i=URL.createObjectURL(r),c=document.createElement("a");c.href=i,c.download="gemini-memory.json",document.body.appendChild(c),c.click(),document.body.removeChild(c),URL.revokeObjectURL(i),alert("Memory exported successfully.");break}case"import-memory-button":{const s=document.createElement("input");s.type="file",s.accept=".json",s.onchange=async a=>{const r=a.target.files[0];if(!r)return;const i=new FileReader;i.onload=async c=>{try{const m=JSON.parse(c.target.result);if(!m.memories||!Array.isArray(m.memories)){alert("Invalid memory file format.");return}const h=m.memories.filter(g=>typeof g=="string");await Ce(h),alert(`${h.length} memories imported successfully! Please reload the page to see the changes in the 'View Memory' modal.`)}catch{alert("Failed to parse JSON or invalid file content.")}},i.readAsText(r)},s.click();break}case"optimize-memory-button":const t=document.getElementById("optimize-memory-button"),n=t.innerHTML;t.disabled=!0,t.innerHTML=`<svg class="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+</svg> Optimizing...`;try{await it(T,F),alert("AI memory has been optimized.")}catch(s){alert("An error occurred during memory optimization."),console.error("Memory optimization error:",s)}finally{t.disabled=!1,t.innerHTML=n}break}}),marked.setOptions({highlight:function(e,o){const t=hljs.getLanguage(o)?o:"plaintext";return hljs.highlight(e,{language:t,ignoreIllegals:!0}).value}}),await Cn(),"serviceWorker"in navigator&&window.addEventListener("load",()=>{navigator.serviceWorker.register("/sw.js").then(e=>{console.log("ServiceWorker registration successful with scope: ",e.scope)},e=>{console.log("ServiceWorker registration failed: ",e)})})}catch(e){console.error("Fatal initialization error:",e),Q(x,`Fatal Error: The application could not start. ${e.message}. Please refresh the page or clear site data.`),C(!0,E,u,b,p),u.placeholder="Application disabled due to an error."}}In();</script>
+</head>
+<body class="bg-slate-900 text-white font-sans flex flex-col h-screen antialiased">
+
+    <!-- Header -->
+    <header class="p-1 bg-slate-800 border-b border-slate-700 shadow-md flex-shrink-0 flex justify-between items-center">
+        <div class="text-left">
+            <h1 class="text-xl font-bold text-white">Gemini AI Chatbox</h1>
+            <div class="flex items-center gap-2">
+                <p class="text-sm text-slate-400">Your context-aware, persistent AI assistant</p>
+                <span id="current-model" class="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full"></span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="settings-button" class="p-2 rounded-full hover:bg-slate-700 transition-colors" aria-label="Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.438.995s.145.755.438.995l1.003.827c.424.35.534.954.26 1.431l-1.296 2.247a1.125 1.125 0 0 1-1.37.49l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.332.183-.582.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.063-.374-.313-.686-.645-.87a6.52 6.52 0 0 1-.22-.127c-.324-.196-.72-.257-1.075-.124l-1.217.456a1.125 1.125 0 0 1-1.37-.49l-1.296-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.437-.995s-.145-.755-.438-.995l-1.004-.827a1.125 1.125 0 0 1-.26-1.431l1.296-2.247a1.125 1.125 0 0 1 1.37-.49l1.217.456c.355.133.75.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.213-1.28Z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                </svg>
+            </button>
+            <button id="clear-chat-button" class="p-2 rounded-full hover:bg-slate-700 transition-colors" aria-label="Clear Chat">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Chat Log -->
+    <main id="chat-log" class="flex-1 overflow-y-auto p-1 md:p-1 space-y-4">
+        <!-- Messages will be dynamically inserted here -->
+    </main>
+    
+    <!-- Footer with Input Area -->
+    <footer class="p-1 md:p-1 bg-slate-900 border-t border-slate-700 flex-shrink-0">
+        <div class="w-full max-w-[100%] mx-auto">
+            <!-- Typing Indicator -->
+            <div id="typing-indicator" class="hidden flex items-end gap-2 justify-start mb-4">
+                <div class="flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-slate-400"><path fill-rule="evenodd" d="M4.5 3.75a3 3 0 00-3 3v10.5a3 3 0 003 3h15a3 3 0 003-3V6.75a3 3 0 00-3-3h-15zm4.125 3.375a.75.75 0 000 1.5h6.75a.75.75 0 000-1.5h-6.75zm0 3.75a.75.75 0 000 1.5h6.75a.75.75 0 000-1.5h-6.75zm0 3.75a.75.75 0 000 1.5h6.75a.75.75 0 000-1.5h-6.75z" clip-rule="evenodd"></path></svg>
+                </div>
+                <div class="bg-slate-700 px-4 py-3 rounded-2xl rounded-bl-none flex items-center space-x-1.5">
+                    <span class="w-2 h-2 bg-slate-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
+                    <span class="w-2 h-2 bg-slate-400 rounded-full animate-pulse [animation-delay:-0.15s]"></span>
+                    <span class="w-2 h-2 bg-slate-400 rounded-full animate-pulse"></span>
+                </div>
+            </div>
+            <!-- Error Message -->
+            <div id="error-message" class="text-red-400 text-center text-sm mb-2 hidden p-3 bg-red-900/50 rounded-lg"></div>
+        </div>
+
+        <div id="image-preview-container" class="hidden w-full max-w-[100%] mx-auto mb-2 relative">
+            <img id="image-preview" class="max-h-40 rounded-lg" />
+            <button id="remove-image-button" class="absolute top-2 right-2 p-1 bg-black/50 rounded-full text-white hover:bg-black/75">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </div>
+        <form id="chat-form" class="w-full max-w-[100%] mx-auto">
+            <div class="relative flex items-center bg-slate-800 rounded-xl border border-slate-700 focus-within:ring-2 focus-within:ring-blue-500 transition-all duration-200">
+                <button id="attach-file-button" type="button" class="p-2 rounded-full hover:bg-slate-700 transition-colors ml-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-slate-400"><path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.122 2.122l7.81-7.81" /></svg>
+                </button>
+                <button id="generate-image-button" type="button" class="p-2 rounded-full hover:bg-slate-700 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-slate-400"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
+                </button>
+                <input type="file" id="file-input" class="hidden" accept="image/*">
+                <textarea id="chat-input" placeholder="Type your message or add an image..." rows="1" class="flex-1 bg-transparent text-white placeholder-slate-400 p-4 focus:outline-none disabled:opacity-50 w-full"></textarea>
+                <button id="send-button" type="submit" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-xl bg-blue-600 text-white hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z"></path></svg>
+                </button>
+            </div>
+        </form>
+    </footer>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/70 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-md border border-slate-700" style="max-height: 95vh; overflow: auto;">
+            <h2 class="text-xl font-bold mb-4">Settings</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="api-key-input" class="block text-sm font-medium text-slate-300 mb-2">Google Gemini API Keys</label>
+                    <textarea id="api-key-input" rows="4" class="w-full bg-slate-900 border border-slate-600 rounded-md p-2 text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Enter one or more API keys, each on a new line..."></textarea>
+                    <p class="text-xs text-slate-400 mt-2">Your keys are obfuscated and saved in your browser's IndexedDB. The app will automatically rotate to the next key if one fails.</p>
+                </div>
+                 <div>
+                    <label for="model-select" class="block text-sm font-medium text-slate-300 mb-2">AI Model</label>
+                    <select id="model-select" class="w-full bg-slate-900 border border-slate-600 rounded-md p-2 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast & Recommended)</option>
+                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                    </select>
+                </div>
+                <div>
+                    <button id="view-memory-button" class="w-full px-4 py-2 rounded-md bg-sky-600 hover:bg-sky-500 transition-colors font-semibold">View AI Memory</button>
+                </div>
+                <div>
+                    <button id="optimize-memory-button" class="w-full px-4 py-2 rounded-md bg-yellow-600 hover:bg-yellow-500 transition-colors font-semibold">Optimize AI Memory</button>
+                </div>
+                <div>
+                    <button id="clear-memory-button" class="w-full px-4 py-2 rounded-md bg-red-600 hover:bg-red-500 transition-colors font-semibold">Clear AI Memory</button>
+                </div>
+                <div class="flex gap-4">
+                    <button id="import-memory-button" class="w-full px-4 py-2 rounded-md bg-green-600 hover:bg-green-500 transition-colors font-semibold">Import Memories</button>
+                    <button id="export-memory-button" class="w-full px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 transition-colors font-semibold">Export Memories</button>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-4">
+                <button id="cancel-settings-button" class="px-4 py-2 rounded-md bg-slate-600 hover:bg-slate-500 transition-colors">Cancel</button>
+                <button id="save-settings-button" class="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 transition-colors font-semibold">Save and Reload</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Memory Modal -->
+    <div id="memory-modal" class="fixed inset-0 bg-black/70 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-2xl border border-slate-700 flex flex-col" style="max-height: 80vh;">
+            <h2 class="text-xl font-bold mb-4">AI Memory</h2>
+            <div id="memory-content" class="flex-1 overflow-y-auto bg-slate-900 p-4 rounded-md">
+                <!-- Memories will be dynamically inserted here -->
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button id="close-memory-modal-button" class="px-4 py-2 rounded-md bg-slate-600 hover:bg-slate-500 transition-colors">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Lightbox Modal -->
+    <div id="image-lightbox" class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 hidden z-50">
+        <div class="relative">
+            <img id="lightbox-image" class="max-w-[90vw] max-h-[85vh] rounded-lg">
+            <button id="close-lightbox-button" class="absolute -top-2 -right-2 p-2 bg-white rounded-full text-slate-800 hover:bg-slate-200 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <a id="download-image-button" href="#" download="image.png" class="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors">
+                Download Image
+            </a>
+        </div>
+    </div>
+
+</body>
+</html>
