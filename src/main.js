@@ -1,5 +1,6 @@
 import { Chart, registerables } from 'chart.js';
 import jsPDF from 'jspdf';
+import { saveApiKey, loadApiKey } from './db.js';
 
 Chart.register(...registerables);
 
@@ -14,7 +15,7 @@ const { GoogleGenerativeAI } = {
         }
         getGenerativeModel({ model, systemInstruction }) {
             return {
-                startChat: ({ history }) => {
+                startChat: ({ history } = {}) => {
                     return new ChatSession(this.apiKey, model, systemInstruction, history);
                 }
             };
@@ -183,7 +184,7 @@ worker.onmessage = function(event) {
   }
 };
 
-csvFileInput.addEventListener('change', (event) => {
+csvFileInput.addEventListener('change', async (event) => {
   const file = event.target.files[0];
   if (!file) return;
 
@@ -192,6 +193,14 @@ csvFileInput.addEventListener('change', (event) => {
     alert('Please enter your API key first.');
     csvFileInput.value = '';
     return;
+  }
+  
+  // Save the key for future sessions
+  try {
+    await saveApiKey(apiKey);
+    console.log('API Key saved.');
+  } catch (error) {
+    console.error('Could not save API key:', error);
   }
 
   csvData = [];
@@ -230,6 +239,20 @@ exportPdfButton.addEventListener('click', () => {
 
     doc.save('report.pdf');
     updateProgress('PDF exported successfully.');
+});
+
+// Load the API key from IndexedDB when the page loads
+window.addEventListener('load', async () => {
+    try {
+        const savedKey = await loadApiKey();
+        if (savedKey) {
+            apiKeyInput.value = savedKey;
+            apiKey = savedKey;
+            console.log('API Key loaded from IndexedDB.');
+        }
+    } catch (error) {
+        console.error('Failed to load API key from IndexedDB:', error);
+    }
 });
 
 

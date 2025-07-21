@@ -10,7 +10,9 @@ self.onmessage = function(event) {
     dynamicTyping: true,
     step: function(results) {
       // Send each row (or a chunk of rows) back to the main thread
-      self.postMessage({ type: 'data', payload: results.data });
+      // The `step` function sends one row at a time. Wrap it in an array
+      // to ensure the main thread always receives an iterable.
+      self.postMessage({ type: 'data', payload: [results.data] });
     },
     complete: function() {
       // Signal completion
