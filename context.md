@@ -3,25 +3,29 @@
 ---
 
 # Project Background
-This project aims to build a **hybrid online/offline**, browser-based intelligent reporting system. Leveraging a multi-agent AI architecture, the system automates processing of user-uploaded business CSV files. The core AI processing requires an internet connection, while the generated reports are fully accessible offline. It strives to transform cumbersome data tasks into efficient intelligent decision support.
+This project is a sophisticated, browser-based intelligent reporting system that transforms raw CSV files into actionable insights. It features a **multi-table database environment** powered by IndexedDB, allowing users to upload, manage, and analyze multiple datasets within a single interface. A multi-agent AI pipeline provides automated analysis and report generation for any selected dataset.
 
 ---
 
 # System Architecture
-- **Development Environment**: The project is built using **Vite** for a modern, fast development experience.
-- **Development Stack**: **Vanilla HTML, CSS, and JavaScript (ES Modules)**.
-- **Styling**: **Tailwind CSS** is used for utility-first styling.
-- **Dependencies**: Managed with `npm`.
+- **Development Environment**: **Vite** for a modern, fast development server and build process.
+- **Styling**: **Tailwind CSS** for utility-first styling.
+- **Dependencies**: Managed with **npm**.
+- **Core Stack**: Vanilla HTML, CSS, and JavaScript (ES Modules).
 
-- **Frontend Browser Environment**
-- **Efficient Streaming Parsing**: Uses PapaParse with Web Workers to perform non-blocking streaming CSV parsing.
-- **Offline Data Storage**: Utilizes IndexedDB for high-performance bulk data writing and indexed querying.
-- **Dynamic Chart Rendering**: Employs **Chart.js** to render dynamic, interactive charts.
-- **High-Quality PDF Export**: Uses **jsPDF** to generate clear, professionally sized PDF reports.
+- **Browser-Based Database Engine (`src/db.js`)**
+- **Multi-Table Storage**: Each uploaded CSV is stored as a distinct "table" within IndexedDB.
+- **Metadata Management**: A dedicated object store tracks the list of all created tables.
+- **Indexed Data**: A single, indexed object store holds all row data, tagged by table name for efficient querying.
 
-- **Multi-Agent AI System (Based on Google Gemini 2.5 Flash)**
-- **Conversational Workflow**: A single, continuous `ChatSession` is used. Each "agent" contributes to the conversation, building on the context from the previous steps to ensure a coherent and intelligent analysis.
-- **Core Intelligence Engine**: API calls to Google Gemini are managed through a simplified SDK-like structure in `src/main.js`.
+- **Frontend Application (`src/main.js`)**
+- **Database Management UI**: A "phpMyAdmin-style" interface with a sidebar for listing, selecting, and deleting tables.
+- **Data Viewer**: A dynamic table renderer displays the contents of any selected dataset.
+- **AI Orchestration**: The main script directs the AI pipeline to run analysis on the user-selected table.
+
+- **Multi-Agent AI System (Google Gemini 2.5 Flash)**
+- **Table-Aware Analysis**: The AI's prompts now include the table name for better contextual understanding.
+- **Conversational Workflow**: A continuous `ChatSession` ensures context is maintained across the three-agent analysis pipeline.
 
 ---
 
@@ -32,58 +36,42 @@ This project aims to build a **hybrid online/offline**, browser-based intelligen
 
 ---
 
-# API Key Security Notice
-**Important**: This application runs entirely in the browser. It requires a Google Gemini API key, which must be provided by the user. The key is stored locally and used for all API requests. **The key will not be stored remotely.**
+# Workflow
+1.  **Set API Key**: Enter your Google Gemini API key. It will be saved in your browser's IndexedDB for future use.
+2.  **Upload CSV**: Upload a CSV file. You will be prompted to give it a unique table name.
+3.  **Manage Data**: The new table will appear in the "Database" panel. You can select it to view its data or delete it.
+4.  **Run Analysis**: With a table selected, click "Run AI Analysis." The AI agents will process the data from that specific table.
+5.  **View & Export**: The generated report (chart and summary) will appear. You can export it as a PDF, which will be named after the analyzed table (e.g., `MyOrders_report.pdf`).
 
 ---
 
 # Multi-Agent Responsibilities
-The analysis is performed by a pipeline of three agents working within a single conversational context.
+The analysis is performed by a pipeline of three agents working on the **selected table's data**.
 
 ## 1. Data Classification Agent
-- **Input**: A sample of the parsed CSV data.
-- **Task**: Analyzes the data sample to determine its business category (e.g., "Purchase Orders," "Invoices").
-- **Output**: The identified category name, which is passed as context to the next agent.
+- **Input**: The table name and a sample of its data.
+- **Task**: Classifies the data into a business category.
 
 ## 2. Analysis Planning Agent
-- **Input**: The data classification and column headers.
-- **Task**: Plans a meaningful analysis and generates a Chart.js configuration object to visualize it.
-- **Output**: A valid JSON object for Chart.js.
+- **Input**: The classification and column headers.
+- **Task**: Generates a Chart.js configuration for a meaningful visualization.
 
 ## 3. Report Generation Agent
-- **Input**: The classification and the generated chart context.
-- **Task**: Writes a brief, insightful summary of the key findings from the analysis.
-- **Output**: A one-paragraph text summary.
+- **Input**: The classification and chart context.
+- **Task**: Writes a brief, insightful summary of the analysis.
 
 ---
 
-# Key Technologies and Optimizations
-- **Vite** for a modern development server and build process.
-- **Vanilla JavaScript (ES Modules)** for a lightweight, framework-free architecture.
-- **Tailwind CSS** for utility-first styling.
-- **Conversational AI (`startChat`)**: Ensures context is maintained throughout the multi-step analysis pipeline.
-- PapaParse with Web Worker for streaming CSV parsing.
-- Chart.js for interactive charts.
-- jsPDF with compressed JPEG chart images to reduce PDF file size.
-
----
-
-# User Experience Highlights
-- Detailed progress feedback showing each agent's status.
-- Interactive reports combining a chart and an AI-generated summary.
-- **User-provided API Key**: Ensures security and control over API usage.
-- **Offline Report Access**: View, interact with, and export reports without an internet connection.
-- One-click export of rich, lightweight PDF reports.
-
----
-
-# Future Directions
-- Hybrid cloud+local AI with lightweight WebAssembly/WebGPU models.
-- Multi-user collaboration and report version control.
-- Intelligent anomaly detection and alerting.
-- Open APIs for integration with enterprise systems.
+# Key Technologies
+- **Vite**
+- **Vanilla JavaScript (ES Modules)**
+- **Tailwind CSS**
+- **IndexedDB**: Used as a multi-table database engine.
+- **PapaParse**: For streaming CSV parsing in a Web Worker.
+- **Chart.js**: For interactive charts.
+- **jsPDF**: For PDF report exporting.
 
 ---
 
 # Summary
-This system seamlessly integrates modern frontend tech with a powerful, conversational AI agent pipeline to deliver a fully automated, intelligent reporting solution. By separating online AI processing from offline report access, it offers a powerful, secure, and user-centric experience.
+This system provides a powerful, self-contained data analysis environment within the browser. By combining a flexible, multi-table database with a potent AI agent pipeline, it empowers users to manage and derive insights from multiple datasets seamlessly and efficiently.
