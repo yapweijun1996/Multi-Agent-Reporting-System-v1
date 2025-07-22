@@ -274,10 +274,14 @@ function renderReport(title, summary, chartConfig, dataForTable) {
     if (chartInstance) chartInstance.destroy();
 
     const reportContainer = document.getElementById('report-content-container');
-    const mainContentArea = document.getElementById('main-content-area');
+    if (!reportContainer) {
+        console.error('Critical Error: report-content-container not found in the DOM.');
+        updateProgress('Error: Could not find the main report container.', true);
+        return;
+    }
     
     // Clear previous content and show the report container
-    const placeholder = mainContentArea.querySelector('.placeholder-text');
+    const placeholder = reportContainer.querySelector('.placeholder-text');
     if (placeholder) {
         placeholder.style.display = 'none';
     }
@@ -680,12 +684,32 @@ function processFullFile(file, tableName) {
 
 async function selectTable(tableName) {
     currentTable = tableName;
-    viewerTitle.textContent = `Viewing: ${tableName}`;
-    viewerActions.classList.remove('hidden');
-    progressContainer.innerHTML = '';
-    progressContainer.classList.remove('hidden');
-    aiSuggestionsContainer.classList.add('hidden');
-    aiSuggestionsContainer.innerHTML = '';
+
+    // Show main dashboard view
+    kpiContainer.style.display = 'grid';
+    chartContainer.style.display = 'block';
+    datatableContainer.style.display = 'block';
+    
+    // Guard clauses to prevent crash if elements are missing
+    if (viewerTitle) {
+        viewerTitle.textContent = `Viewing: ${tableName}`;
+    } else {
+        console.error('Could not find viewerTitle element.');
+    }
+
+    if (viewerActions) {
+        viewerActions.classList.remove('hidden');
+    } else {
+        console.error('Could not find viewerActions element.');
+    }
+
+    if (progressContainer) {
+        progressContainer.innerHTML = '';
+        progressContainer.classList.remove('hidden');
+    } else {
+        console.error('Could not find progressContainer element.');
+    }
+    
     updateProgress(`Loading data for "${tableName}"...`);
     try {
         currentData = await loadDataFromTable(tableName);
@@ -702,6 +726,12 @@ async function handleRunAnalysis() {
     progressContainer.innerHTML = '';
     progressContainer.classList.remove('hidden');
     updateProgress('AI is analyzing the database to suggest reports...');
+
+    // Hide the main dashboard view to show suggestions
+    kpiContainer.style.display = 'none';
+    chartContainer.style.display = 'none';
+    datatableContainer.style.display = 'block'; // Keep this visible for suggestions
+
     try {
         const dbSchema = await loadDbSchema();
         if (!dbSchema) {
@@ -743,15 +773,22 @@ function renderReportSuggestions(suggestions) {
         dataTableInstance.destroy();
         dataTableInstance = null;
     }
-    reportContentContainer.innerHTML = '<p class="placeholder-text">Select a report suggestion to generate.</p>';
-    aiSuggestionsContainer.innerHTML = '';
-    aiSuggestionsContainer.classList.remove('hidden');
+
+    // Use the report content container to show suggestions
+    const reportContainer = document.getElementById('report-content-container');
+    if (!reportContainer) {
+        console.error('Cannot render suggestions: report-content-container not found.');
+        return;
+    }
+    reportContainer.innerHTML = '';
+    reportContainer.style.display = 'block'; // Ensure it's visible
 
     const titleEl = document.createElement('h3');
     titleEl.textContent = 'AI Report Suggestions:';
-    aiSuggestionsContainer.appendChild(titleEl);
+    reportContainer.appendChild(titleEl);
 
     const suggestionsGrid = document.createElement('div');
+    suggestionsGrid.className = 'ai-suggestions-grid';
     suggestions.forEach(suggestion => {
         const button = document.createElement('button');
         button.className = 'ai-suggestion-card';
@@ -760,13 +797,28 @@ function renderReportSuggestions(suggestions) {
         suggestionsGrid.appendChild(button);
     });
 
-    aiSuggestionsContainer.appendChild(suggestionsGrid);
+    reportContainer.appendChild(suggestionsGrid);
     updateProgress('Please select a report to generate.');
 }
 
 async function runReportExecution(suggestion) {
     updateProgress(`Generating report: "${suggestion.title}"...`);
     log('Executing report suggestion:', suggestion);
+
+    // Ensure the report container is visible
+    if (reportContentContainer) {
+        reportContentContainer.style.display = 'grid';
+    }
+    if (datatableContainer) {
+        datatableContainer.style.display = 'none';
+    }
+    if (kpiContainer) {
+        kpiContainer.style.display = 'none';
+    }
+    if (chartContainer) {
+        chartContainer.style.display = 'none';
+    }
+
     try {
         const { tables, join } = suggestion.query;
         let joinedData = [];
@@ -803,10 +855,11 @@ async function runReportExecution(suggestion) {
                     groups[groupValue] = {
                         [groupBy]: groupValue,
                         [newColumnName]: 0,
-                        ...((method.toUpperCase() === 'AVG') && { _sum: 0, _count: 0 })
+                        ...((method && method.toUpperCase() === 'AVG') && { _sum: 0, _count: 0 })
                     };
                 }
                 const value = parseFloat(row[column]);
+                if (!method) return;
                 switch (method.toUpperCase()) {
                     case 'SUM':
                         groups[groupValue][newColumnName] += (value || 0);
@@ -825,7 +878,7 @@ async function runReportExecution(suggestion) {
 
             aggregatedData = Object.values(groups);
 
-            if (method.toUpperCase() === 'AVG') {
+            if (method && method.toUpperCase() === 'AVG') {
                 aggregatedData.forEach(group => {
                     group[newColumnName] = group._count > 0 ? group._sum / group._count : 0;
                     delete group._sum;

@@ -50,7 +50,17 @@ The data import process is managed by the `runDataProcessingPipeline` orchestrat
 
 ---
 
-## 4. Running the Application
+## 4. Styling and Customization
+
+The application's visual appearance is governed by a centralized stylesheet (`src/style.css`) that enforces a strict and consistent design language.
+
+-   **Font Size**: All elements in the application are styled with a fixed font size of **12px**. The use of relative units like `rem` or `em` has been eliminated to ensure a uniform look.
+-   **Line Height**: A global `line-height` of **12px** is applied to all elements to maintain consistent vertical spacing.
+-   **Margin**: A universal `margin` of **3px** is applied to every element. This creates a tight, uniform spacing across the entire interface, overriding all other margin rules.
+
+---
+
+## 5. Running the Application
 
 To run this application, you must serve it from a local web server to avoid browser CORS errors. A simple way to do this is with Python's built-in HTTP server.
 
@@ -60,6 +70,8 @@ To run this application, you must serve it from a local web server to avoid brow
 
 ---
 
-## 5. Final Status
+## 6. Final Status
 
-The application is stable, feature-complete, and free of known bugs. All core architectural challenges, including data integrity and application startup errors, have been resolved. The final product is a robust and user-friendly data analysis tool.
+The application is stable and all recent development tasks have been completed. The latest updates include:
+-   **Bug Fix**: Resolved a `TypeError` in `src/main.js` that occurred during report generation due to missing data from the AI agent. The code now includes checks to handle this gracefully.
+-   **Styling Standardization**: The entire application's styling has been updated to enforce a consistent `12px` font size, `12px` line height, and a `3px` margin on all elements.
