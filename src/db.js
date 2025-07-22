@@ -2,10 +2,12 @@ const DB_NAME = 'MultiAgentReportDB';
 const DB_VERSION = 3;
 const CONFIG_STORE_NAME = 'config';
 const METADATA_STORE_NAME = 'db_metadata';
+const SCHEMA_STORE_NAME = 'db_schema';
 const DATA_STORE_NAME = 'csv_data_store';
 
 const API_KEY_ID = 'apiKey';
 const TABLE_LIST_ID = 'table_list';
+const DB_SCHEMA_ID = 'master_schema';
 
 let db;
 
@@ -24,6 +26,9 @@ function openDB() {
       }
       if (!dbInstance.objectStoreNames.contains(METADATA_STORE_NAME)) {
           dbInstance.createObjectStore(METADATA_STORE_NAME, { keyPath: 'id' });
+      }
+      if (!dbInstance.objectStoreNames.contains(SCHEMA_STORE_NAME)) {
+          dbInstance.createObjectStore(SCHEMA_STORE_NAME, { keyPath: 'id' });
       }
       if (!dbInstance.objectStoreNames.contains(DATA_STORE_NAME)) {
         const dataStore = dbInstance.createObjectStore(DATA_STORE_NAME, { autoIncrement: true });
@@ -153,15 +158,38 @@ export async function deleteTable(tableName) {
 }
 
 export async function getTableSchemas() {
-    const dbInstance = await openDB();
-    const tableNames = await listTables();
-    const schemas = {};
+    const fullSchema = await loadDbSchema();
+    if (!fullSchema) return {};
 
-    for (const tableName of tableNames) {
-        const dataSample = await loadDataFromTable(tableName); // Assuming this returns an array
-        if (dataSample.length > 0) {
-            schemas[tableName] = Object.keys(dataSample[0]).filter(k => k !== 'tableName');
-        }
+    // This is a temporary adapter to maintain compatibility with the old reporting agent.
+    // It returns the schema in the old format: { tableName: [column1, column2] }
+    const simplifiedSchemas = {};
+    for (const [tableName, tableDetails] of Object.entries(fullSchema)) {
+        simplifiedSchemas[tableName] = tableDetails.columns;
     }
-    return schemas;
+    return simplifiedSchemas;
+}
+// --- Schema Management ---
+export async function saveDbSchema(schema) {
+    const dbInstance = await openDB();
+    return new Promise((resolve, reject) => {
+        const transaction = dbInstance.transaction([SCHEMA_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(SCHEMA_STORE_NAME);
+        store.put({ id: DB_SCHEMA_ID, value: schema });
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = (event) => reject(event.target.error);
+    });
+}
+
+export async function loadDbSchema() {
+    const dbInstance = await openDB();
+    return new Promise((resolve, reject) => {
+        const transaction = dbInstance.transaction([SCHEMA_STORE_NAME], 'readonly');
+        const store = transaction.objectStore(SCHEMA_STORE_NAME);
+        const request = store.get(DB_SCHEMA_ID);
+        request.onsuccess = (event) => {
+            resolve(event.target.result ? event.target.result.value : null);
+        };
+        request.onerror = (event) => reject(event.target.error);
+    });
 }

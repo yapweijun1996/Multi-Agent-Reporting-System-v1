@@ -9,7 +9,9 @@ import {
     saveNewCsvAsTable,
     loadDataFromTable,
     deleteTable,
-    getTableSchemas
+    getTableSchemas,
+    saveDbSchema,
+    loadDbSchema
 } from './db.js';
 
 Chart.register(...registerables);
@@ -220,13 +222,18 @@ csvFileInput.addEventListener('change', async (event) => {
             previewWorker.terminate();
             try {
                 const schemaPlan = await getAiDatabaseSchemaPlan(filePreview);
+                const dbSchema = schemaPlan.schema;
                 let planSummary = "AI Database Architect Plan:\n";
-                Object.entries(schemaPlan).forEach(([tableName, columns]) => {
-                    planSummary += `- Create table '${tableName}' with columns: ${columns.join(', ')}\n`;
+                Object.entries(dbSchema).forEach(([tableName, tableDetails]) => {
+                    planSummary += `- Table: '${tableName}' (PK: ${tableDetails.primary_key})\n`;
+                    planSummary += `  Columns: ${tableDetails.columns.join(', ')}\n`;
+                    if (Object.keys(tableDetails.foreign_keys).length > 0) {
+                        planSummary += `  Relationships: ${JSON.stringify(tableDetails.foreign_keys)}\n`;
+                    }
                 });
 
                 updateProgress(planSummary);
-                processFileWithSchemaPlan(file, schemaPlan);
+                processFileWithSchemaPlan(file, dbSchema);
 
             } catch (error) {
                 updateProgress(`AI Architect failed: ${error.message}`, true);
@@ -253,19 +260,18 @@ function processFileWithSchemaPlan(file, schemaPlan) {
             fullData.push(...payload);
         } else if (type === 'complete') {
             worker.terminate();
-            for (const [tableName, columns] of Object.entries(schemaPlan)) {
+            for (const [tableName, tableDetails] of Object.entries(schemaPlan)) {
+                const { columns, primary_key } = tableDetails;
                 const uniqueRows = new Map();
-                const primaryKey = columns[0];
 
                 fullData.forEach(fullRow => {
-                    // Only proceed if the row from the source CSV contains the primary key for the new table.
-                    if (fullRow.hasOwnProperty(primaryKey) && fullRow[primaryKey]) {
+                    if (fullRow.hasOwnProperty(primary_key) && fullRow[primary_key]) {
                         const newRow = {};
                         columns.forEach(col => {
                             newRow[col] = fullRow.hasOwnProperty(col) ? fullRow[col] : null;
                         });
 
-                        const pkValue = newRow[primaryKey];
+                        const pkValue = newRow[primary_key];
                         if (!uniqueRows.has(pkValue)) {
                             uniqueRows.set(pkValue, newRow);
                         }
@@ -275,9 +281,12 @@ function processFileWithSchemaPlan(file, schemaPlan) {
                 const tableData = Array.from(uniqueRows.values());
                 if (tableData.length > 0) {
                     await saveNewCsvAsTable(tableName, tableData);
+                    updateProgress(`Successfully created and populated table: "${tableName}"`);
+                } else {
+                    updateProgress(`Table "${tableName}" was defined but no unique data was found to populate it.`);
                 }
-                updateProgress(`Successfully created and populated table: "${tableName}"`);
             }
+            await saveDbSchema(schemaPlan);
             await renderTableList();
             const firstTable = Object.keys(schemaPlan)[0];
             if (firstTable) {
@@ -330,12 +339,19 @@ async function selectTable(tableName) {
     }
 }
 
-runAnalysisBtn.addEventListener('click', () => {
-    if (!currentData || currentData.length === 0) return alert('No data selected to analyze.');
+runAnalysisBtn.addEventListener('click', async () => {
     apiKey = apiKeyInput.value;
     if (!apiKey) return alert('Please enter your API key.');
     progressContainer.innerHTML = '';
-    runAnalysisPipeline(currentData);
+    updateProgress('AI is analyzing the database to suggest reports...');
+    
+    try {
+        const reportSuggestions = await getAiReportSuggestions();
+        renderReportSuggestions(reportSuggestions);
+    } catch (error) {
+        updateProgress(`Failed to get report suggestions: ${error.message}`, true);
+        console.error(error);
+    }
 });
 
 exportPdfBtn.addEventListener('click', () => {
@@ -365,21 +381,28 @@ async function getAiDatabaseSchemaPlan(data) {
     const headers = Object.keys(data[0]);
 
     const prompt = `
-        You are a Database Architect AI. Your task is to analyze the columns of a new dataset and design a relational database schema by splitting the columns into logical tables.
+You are a world-class Database Architect AI. Your task is to design a complete and normalized relational database schema from a flat list of columns.
 
-        Here are the columns from the new dataset:
-        ${headers.join(', ')}
+Input Columns:
+${headers.join(', ')}
 
-        Analyze these columns and group them into distinct logical entities. For example, columns like 'customer_id', 'customer_name', 'email' belong in a 'customers' table, while 'order_id', 'product_id', 'quantity' belong in an 'orders' table.
+Your Task:
+1. Identify Entities: Analyze the columns to identify distinct logical entities (e.g., customers, orders, products).
+2. Define Tables: Create a table for each entity. Table names should be plural and in snake_case (e.g., 'order_items').
+3. Assign Columns: Assign each relevant input column to its corresponding table.
+4. Define Primary Keys: Identify the most suitable primary key for each table from its columns.
+5. Define Foreign Keys: Establish relationships between tables by identifying foreign keys. A foreign key in one table must be the primary key of another.
 
-        Propose a schema by responding with ONLY a JSON object in the following format. Each key is the proposed new table name, and the value is an array of column names from the original dataset that should belong to that table.
+Output Format:
+You must respond with ONLY a single, minified JSON object. The object should have a single root key "schema". The value of "schema" is an object where each key is a table name.
 
-        Example Response:
-        {
-            "customers": ["customer_id", "customer_name", "email"],
-            "orders": ["order_id", "order_date", "customer_id", "total_amount"],
-            "products": ["product_id", "product_name", "price"]
-        }
+For each table, provide an object with three keys:
+"columns": An array of strings representing the column names for that table.
+"primary_key": A string indicating the name of the primary key column.
+"foreign_keys": An object where each key is a foreign key column in the current table, and the value is the referenced table and column in the format "referenced_table.referenced_column".
+
+Example Response:
+{"schema":{"customers":{"columns":["customer_id","customer_name","email"],"primary_key":"customer_id","foreign_keys":{}},"orders":{"columns":["order_id","order_date","customer_id","total_amount"],"primary_key":"order_id","foreign_keys":{"customer_id":"customers.customer_id"}},"products":{"columns":["product_id","product_name","price"],"primary_key":"product_id","foreign_keys":{}},"order_items":{"columns":["order_item_id","order_id","product_id","quantity","price_per_unit"],"primary_key":"order_item_id","foreign_keys":{"order_id":"orders.order_id","product_id":"products.product_id"}}}}
     `;
 
     const chat = model.startChat();
@@ -390,46 +413,118 @@ async function getAiDatabaseSchemaPlan(data) {
     return JSON.parse(cleanedText);
 }
 
-async function runAnalysisPipeline(data) {
-    updateProgress('Starting AI analysis...');
+function renderReportSuggestions(suggestions) {
+    if (dataTableInstance) {
+        dataTableInstance.destroy();
+        dataTableInstance = null;
+    }
+    mainContentArea.innerHTML = '';
+    
+    const titleEl = document.createElement('h3');
+    titleEl.className = 'text-2xl font-bold mb-4';
+    titleEl.textContent = 'AI Report Suggestions';
+    mainContentArea.appendChild(titleEl);
+
+    const suggestionsContainer = document.createElement('div');
+    suggestionsContainer.className = 'flex flex-col space-y-2';
+    
+    suggestions.forEach(suggestion => {
+        const button = document.createElement('button');
+        button.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-left';
+        button.textContent = suggestion.title;
+        button.onclick = () => runReportExecution(suggestion);
+        suggestionsContainer.appendChild(button);
+    });
+
+    mainContentArea.appendChild(suggestionsContainer);
+    updateProgress('Please select a report to generate.');
+}
+
+async function getAiReportSuggestions() {
+    const dbSchema = await loadDbSchema();
+    if (!dbSchema) throw new Error("Database schema not found. Please upload a file first.");
+
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const prompt = `
+        You are a Business Intelligence Analyst AI. Your task is to propose a list of insightful reports based on the available database schema.
+
+        **Database Schema:**
+        ${JSON.stringify(dbSchema, null, 2)}
+
+        **Your Task:**
+        1. Analyze the schema to understand the relationships between tables.
+        2. Brainstorm a list of 3 to 5 meaningful business reports that can be generated from this data.
+        3. For each report, provide a clear title and a concise description.
+        4. Crucially, for each report, specify the 'Chart.js' configuration and a 'query' object.
+        5. The 'query' object should detail which tables to use and which columns to select. This will be used to fetch and join data client-side.
+
+        **Output Format:**
+        You must respond with ONLY a single, minified JSON object containing a list of report suggestions.
+
+        **Example Response:**
+        [{"title":"Total Sales per Customer","description":"Displays the total purchase amount for each customer.","query":{"tables":["customers","orders"],"columns":{"customers":["customer_name"],"orders":["total_amount"]},"join_on":"customer_id"},"chart_config":{"type":"bar","data":{"labels":[],"datasets":[{"label":"Total Sales (USD)","data":[]}]},"options":{}}},{"title":"Orders per Month","description":"Shows the number of orders placed each month.","query":{"tables":["orders"],"columns":{"orders":["order_date"]}},"chart_config":{"type":"line","data":{"labels":[],"datasets":[{"label":"Number of Orders","data":[]}]},"options":{}}}]
+    `;
+
     const chat = model.startChat();
+    const result = await chat.sendMessage(prompt);
+    const responseText = result.response.text();
+    const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+    const cleanedText = jsonMatch ? jsonMatch[1] : responseText;
+    return JSON.parse(cleanedText);
+}
 
-    function cleanJson(text) {
-        const match = text.match(/```json\n([\s\S]*?)\n```/);
-        return match ? match[1] : text;
-    }
-
+async function runReportExecution(suggestion) {
+    updateProgress(`Generating report: "${suggestion.title}"...`);
     try {
-        // Agent 1: Data Classification
-        updateProgress('Agent 1: Classifying data...');
-        const sampleData = JSON.stringify(data.slice(0, 3), null, 2);
-        const classificationPrompt = `Based on the following CSV data sample from a table named "${currentTable}", classify the data into a business category (e.g., "Purchase Orders", "Invoices"). Respond with only the category name.\n\nData:\n${sampleData}`;
-        let result = await chat.sendMessage(classificationPrompt);
-        let classification = result.response.text();
-        updateProgress(`Data classified as: ${classification}`);
+        // This is a simplified client-side join. A real-world app would do this server-side.
+        const { tables, columns, join_on } = suggestion.query;
+        let joinedData = [];
 
-        // Agent 2: Analysis Planning
-        updateProgress('Agent 2: Planning analysis & chart...');
-        const headers = Object.keys(data[0]).filter(h => h !== 'tableName').join(', ');
-        const planningPrompt = `Given that the data is "${classification}" with columns [${headers}], generate a single Chart.js configuration object for a meaningful chart. Respond ONLY with the complete JSON object for the Chart.js configuration, enclosed in \`\`\`json ... \`\`\`.`;
-        result = await chat.sendMessage(planningPrompt);
-        const chartConfigStr = result.response.text();
-        updateProgress('Chart configuration received.');
+        // Load data for all required tables
+        const tableData = {};
+        for (const tableName of tables) {
+            tableData[tableName] = await loadDataFromTable(tableName);
+        }
+
+        if (tables.length === 1) {
+            joinedData = tableData[tables[0]];
+        } else if (tables.length > 1 && join_on) {
+            // Simple two-table join based on the first two tables and join_on key
+            const tableA = tableData[tables[0]];
+            const tableB = tableData[tables[1]];
+            const mapB = new Map(tableB.map(item => [item[join_on], item]));
+
+            joinedData = tableA.map(itemA => {
+                const itemB = mapB.get(itemA[join_on]);
+                return { ...itemA, ...itemB };
+            });
+        }
         
-        const chartConfig = JSON.parse(cleanJson(chartConfigStr));
-
-        // Agent 3: Report Generation
-        updateProgress('Agent 3: Generating report summary...');
-        const summaryPrompt = `Based on the classification "${classification}" and the generated chart, write a brief, one-paragraph summary of the key insight.`;
-        result = await chat.sendMessage(summaryPrompt);
+        // This is a placeholder for a more sophisticated data aggregation step
+        // For now, we assume the AI gives a chart config that can handle the raw joined data.
+        // A real implementation would need an AI agent here to process 'joinedData'
+        // into the final labels and data points for the chart.
+        
+        updateProgress('Data joined. Generating final summary and chart...');
+        
+        // For now, we pass the raw joined data to a simplified summary agent
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const chat = model.startChat();
+        
+        const summaryPrompt = `The user generated a report titled "${suggestion.title}". Based on this title and the report's description ("${suggestion.description}"), write a brief, one-paragraph summary of the likely key insight. This is a placeholder for a more complex data analysis step.`;
+        const result = await chat.sendMessage(summaryPrompt);
         const summary = result.response.text();
 
-        renderReport(classification, summary, chartConfig);
+        // NOTE: The chart config from the suggestion is used directly.
+        // This is a major simplification. In a real scenario, the data would need to be
+        // aggregated and mapped to the chart's labels and datasets.
+        renderReport(suggestion.title, summary, suggestion.chart_config);
 
     } catch (error) {
-        updateProgress(`AI analysis failed: ${error.message}`, true);
+        updateProgress(`Report generation failed: ${error.message}`, true);
         console.error(error);
     }
 }
