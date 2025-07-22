@@ -168,7 +168,7 @@ function renderDataTable(data) {
     });
 }
 
-function renderReport(title, summary, chartConfig, data) {
+function renderReport(title, summary, chartConfig, dataForTable) {
     if (dataTableInstance) {
         dataTableInstance.destroy();
         dataTableInstance = null;
@@ -200,7 +200,7 @@ function renderReport(title, summary, chartConfig, data) {
     const tableContainer = document.createElement('div');
     tableContainer.id = 'report-table-container';
     mainContentArea.appendChild(tableContainer);
-    renderDataTable(data);
+    renderDataTable(dataForTable);
 
 
     updateProgress('Report generated successfully!');
@@ -749,6 +749,7 @@ async function runReportExecution(suggestion) {
         
         let finalData = joinedData;
         const { aggregation } = suggestion.query;
+        let aggregatedData;
 
         if (aggregation) {
             updateProgress('Performing data aggregation...');
@@ -763,7 +764,7 @@ async function runReportExecution(suggestion) {
                 groups[groupValue].push(row);
             });
 
-            const aggregatedData = Object.entries(groups).map(([groupValue, rows]) => {
+            aggregatedData = Object.entries(groups).map(([groupValue, rows]) => {
                 let result;
                 switch (method.toUpperCase()) {
                     case 'SUM':
@@ -829,7 +830,7 @@ async function runReportExecution(suggestion) {
         const result = await chat.sendMessage(summaryPrompt);
         const summary = result.response.text();
 
-        renderReport(suggestion.title, summary, chartConfig, finalData);
+        renderReport(suggestion.title, summary, chartConfig, aggregation ? aggregatedData : joinedData);
 
     } catch (error) {
         updateProgress(`Report generation failed: ${error.message}`, true);
