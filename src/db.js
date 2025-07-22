@@ -1,5 +1,5 @@
 const DB_NAME = 'MultiAgentReportDB';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const CONFIG_STORE_NAME = 'config';
 const METADATA_STORE_NAME = 'db_metadata';
 const SCHEMA_STORE_NAME = 'db_schema';
@@ -88,26 +88,34 @@ export async function listTables() {
     });
 }
 
-export async function saveNewCsvAsTable(tableName, data) {
+export async function saveTableData(tableName, data) {
     const dbInstance = await openDB();
-    return new Promise(async (resolve, reject) => {
-        const transaction = dbInstance.transaction([DATA_STORE_NAME, METADATA_STORE_NAME], 'readwrite');
-        const dataStore = transaction.objectStore(DATA_STORE_NAME);
-        const metadataStore = transaction.objectStore(METADATA_STORE_NAME);
-
+    return new Promise((resolve, reject) => {
+        const transaction = dbInstance.transaction([DATA_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(DATA_STORE_NAME);
         data.forEach(row => {
-            dataStore.add({ ...row, tableName });
+            store.add({ ...row, tableName });
         });
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = (event) => reject(event.target.error);
+    });
+}
 
-        const tableListRequest = metadataStore.get(TABLE_LIST_ID);
-        tableListRequest.onsuccess = (event) => {
+export async function updateTableList(newTableNames) {
+    if (!newTableNames || newTableNames.length === 0) return;
+    const dbInstance = await openDB();
+    return new Promise((resolve, reject) => {
+        const transaction = dbInstance.transaction([METADATA_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(METADATA_STORE_NAME);
+        const request = store.get(TABLE_LIST_ID);
+        request.onsuccess = (event) => {
             const tableListRecord = event.target.result;
             const existingTables = tableListRecord ? tableListRecord.names : [];
-            if (!existingTables.includes(tableName)) {
-                metadataStore.put({ id: TABLE_LIST_ID, names: [...existingTables, tableName] });
+            const uniqueNewTables = newTableNames.filter(name => !existingTables.includes(name));
+            if (uniqueNewTables.length > 0) {
+                store.put({ id: TABLE_LIST_ID, names: [...existingTables, ...uniqueNewTables] });
             }
         };
-        
         transaction.oncomplete = () => resolve();
         transaction.onerror = (event) => reject(event.target.error);
     });

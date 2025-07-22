@@ -6,7 +6,8 @@ import {
     saveApiKey,
     loadApiKey,
     listTables,
-    saveNewCsvAsTable,
+    saveTableData,
+    updateTableList,
     loadDataFromTable,
     deleteTable,
     getTableSchemas,
@@ -260,14 +261,18 @@ function processFileWithSchemaPlan(file, schemaPlan) {
             fullData.push(...payload);
         } else if (type === 'complete') {
             worker.terminate();
-            for (const [tableName, tableDetails] of Object.entries(schemaPlan)) {
+            const newTableNames = Object.keys(schemaPlan);
+            for (const tableName of newTableNames) {
+                const tableDetails = schemaPlan[tableName];
                 const { columns, primary_key } = tableDetails;
+                const columnsToProcess = new Set(columns);
+                columnsToProcess.add(primary_key); // Ensure PK is always included
                 const uniqueRows = new Map();
 
                 fullData.forEach(fullRow => {
                     if (fullRow.hasOwnProperty(primary_key) && fullRow[primary_key]) {
                         const newRow = {};
-                        columns.forEach(col => {
+                        columnsToProcess.forEach(col => {
                             newRow[col] = fullRow.hasOwnProperty(col) ? fullRow[col] : null;
                         });
 
@@ -280,12 +285,14 @@ function processFileWithSchemaPlan(file, schemaPlan) {
 
                 const tableData = Array.from(uniqueRows.values());
                 if (tableData.length > 0) {
-                    await saveNewCsvAsTable(tableName, tableData);
+                    await saveTableData(tableName, tableData);
                     updateProgress(`Successfully created and populated table: "${tableName}"`);
                 } else {
                     updateProgress(`Table "${tableName}" was defined but no unique data was found to populate it.`);
                 }
             }
+            
+            await updateTableList(newTableNames);
             await saveDbSchema(schemaPlan);
             await renderTableList();
             const firstTable = Object.keys(schemaPlan)[0];
@@ -311,7 +318,8 @@ function processFullFile(file, tableName) {
         if (type === 'data') {
             fullData.push(...payload);
         } else if (type === 'complete') {
-            await saveNewCsvAsTable(tableName, fullData);
+            await saveTableData(tableName, fullData);
+            await updateTableList([tableName]);
             await renderTableList();
             selectTable(tableName);
             csvFileInput.value = '';
@@ -392,6 +400,7 @@ Your Task:
 3. Assign Columns: Assign each relevant input column to its corresponding table.
 4. Define Primary Keys: Identify the most suitable primary key for each table from its columns.
 5. Define Foreign Keys: Establish relationships between tables by identifying foreign keys. A foreign key in one table must be the primary key of another.
+6. **Crucially, you MUST use the exact column names provided in the 'Input Columns' list for all 'columns', 'primary_key', and 'foreign_keys' in your output. Do not change casing or formatting.**
 
 Output Format:
 You must respond with ONLY a single, minified JSON object. The object should have a single root key "schema". The value of "schema" is an object where each key is a table name.
@@ -401,8 +410,8 @@ For each table, provide an object with three keys:
 "primary_key": A string indicating the name of the primary key column.
 "foreign_keys": An object where each key is a foreign key column in the current table, and the value is the referenced table and column in the format "referenced_table.referenced_column".
 
-Example Response:
-{"schema":{"customers":{"columns":["customer_id","customer_name","email"],"primary_key":"customer_id","foreign_keys":{}},"orders":{"columns":["order_id","order_date","customer_id","total_amount"],"primary_key":"order_id","foreign_keys":{"customer_id":"customers.customer_id"}},"products":{"columns":["product_id","product_name","price"],"primary_key":"product_id","foreign_keys":{}},"order_items":{"columns":["order_item_id","order_id","product_id","quantity","price_per_unit"],"primary_key":"order_item_id","foreign_keys":{"order_id":"orders.order_id","product_id":"products.product_id"}}}}
+Example Response (using exact headers from a hypothetical input):
+{"schema":{"Customers":{"columns":["CustomerID","CustomerName","Email"],"primary_key":"CustomerID","foreign_keys":{}},"Orders":{"columns":["OrderID","OrderDate","CustomerID","TotalAmount"],"primary_key":"OrderID","foreign_keys":{"CustomerID":"Customers.CustomerID"}}}}
     `;
 
     const chat = model.startChat();
