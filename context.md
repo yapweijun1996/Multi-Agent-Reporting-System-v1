@@ -6,7 +6,7 @@
 
 This project is a sophisticated, single-page web application that functions as an end-to-end data engineering and business intelligence platform. It leverages a suite of AI agents to intelligently analyze raw CSV data, design and populate a relational database within the browser, and generate dynamic, interactive reports. The system is architected to solve complex data challenges, including record de-duplication and maintaining relational integrity, providing a seamless workflow from raw data to actionable insights.
 
-The user experience is centered around a polished interface featuring a slide-in panel for configuration, a real-time execution log for transparency, and a two-column layout for managing data and viewing reports.
+The user experience has been upgraded to a professional ERP-style dashboard. It features a header, a persistent sidebar for navigation, and a main content area with modular widgets for KPIs, charts, and detailed data tables.
 
 ---
 
@@ -41,7 +41,8 @@ The data import process is managed by the `runDataProcessingPipeline` orchestrat
 
 ## 3. Key Features & UI/UX
 
--   **Vite & Tailwind CSS**: The application is built with a modern frontend stack, ensuring a fast development experience and a clean, responsive design.
+-   **Modern ERP Dashboard**: The UI has been redesigned into a responsive, grid-based dashboard layout, providing a professional and intuitive user experience.
+-   **Modular Widgets**: The dashboard consists of reusable components, including KPI cards for at-a-glance metrics, a main chart for data visualization, and a detailed, interactive data table.
 -   **Client-Side Database**: All data is stored and managed locally in the user's browser using **IndexedDB**, providing a secure and private environment.
 -   **Dynamic Reporting**: The "BI Analyst" agent suggests reports, which are then rendered with interactive charts (using Chart.js) and sortable data tables (using DataTables.js). Reports can be exported as PDFs.
 -   **Robust Initialization**: The application's entry point (`src/main.js`) uses a strict `DOMContentLoaded` listener to prevent race condition errors, ensuring all DOM elements are available before any script attempts to access them.
@@ -49,6 +50,16 @@ The data import process is managed by the `runDataProcessingPipeline` orchestrat
 
 ---
 
-## 4. Final Status
+## 4. Running the Application
+
+To run this application, you must serve it from a local web server to avoid browser CORS errors. A simple way to do this is with Python's built-in HTTP server.
+
+1.  Navigate to the project's root directory in your terminal.
+2.  Run the following command: `python3 -m http.server 8888`
+3.  Open your web browser and go to `http://localhost:8888`.
+
+---
+
+## 5. Final Status
 
 The application is stable, feature-complete, and free of known bugs. All core architectural challenges, including data integrity and application startup errors, have been resolved. The final product is a robust and user-friendly data analysis tool.

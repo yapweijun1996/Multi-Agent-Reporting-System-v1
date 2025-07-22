@@ -1,7 +1,39 @@
-import { Chart, registerables } from 'chart.js';
-import jsPDF from 'jspdf';
-import $ from 'jquery';
-import DataTable from 'datatables.net-dt';
+const { jsPDF } = window.jspdf;
+
+const workerCode = `
+    self.importScripts('https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js');
+
+    self.onmessage = function(event) {
+        const { file, preview } = event.data;
+        const isPreview = !!preview;
+        let rowCount = 0;
+        const PREVIEW_ROWS = 10;
+
+        Papa.parse(file, {
+            worker: false,
+            header: true,
+            dynamicTyping: true,
+            step: function(results, parser) {
+                rowCount++;
+                self.postMessage({ type: 'data', payload: [results.data] });
+                
+                if (isPreview && rowCount >= PREVIEW_ROWS) {
+                    parser.abort();
+                    self.postMessage({ type: 'complete' });
+                }
+            },
+            complete: function() {
+                self.postMessage({ type: 'complete' });
+            },
+            error: function(error) {
+                self.postMessage({ type: 'error', payload: error });
+            }
+        });
+    };
+`;
+const blob = new Blob([workerCode], { type: 'application/javascript' });
+const workerUrl = URL.createObjectURL(blob);
+
 import {
     listTables,
     saveTableData,
@@ -16,8 +48,6 @@ import {
 } from './db.js';
 import { agentManager } from './agents/agent-manager.js';
 
-Chart.register(...registerables);
-
 // --- STATE MANAGEMENT ---
 let chartInstance = null;
 let currentTable = null;
@@ -26,8 +56,9 @@ let dataTableInstance = null;
 
 // --- DOM ELEMENT VARIABLES ---
 let csvFileInput, tableListContainer, viewerTitle, viewerActions, runAnalysisBtn,
-    exportPdfBtn, progressContainer, aiSuggestionsContainer, mainContentArea, debugLogContainer,
-    settingsBtn, settingsPanel, settingsOverlay, apiKeyInput, saveSettingsBtn, closePanelBtn;
+    exportPdfBtn, progressContainer, aiSuggestionsContainer, debugLogContainer,
+    settingsBtn, settingsPanel, settingsOverlay, apiKeyInput, saveSettingsBtn, closePanelBtn,
+    toggleVisibilityBtn, kpiContainer, chartContainer, datatableContainer, reportContentContainer;
 
 // --- CORE INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -46,14 +77,18 @@ function assignDOMElements() {
     exportPdfBtn = document.getElementById('exportPdfBtn');
     progressContainer = document.getElementById('progress-container');
     aiSuggestionsContainer = document.getElementById('ai-suggestions-container');
-    mainContentArea = document.getElementById('main-content-area');
-    debugLogContainer = document.getElementById('debug-log-container');
+    debugLogContainer = document.getElementById('debug-log');
     settingsBtn = document.getElementById('settings-btn');
     settingsPanel = document.getElementById('settings-panel');
     settingsOverlay = document.getElementById('settings-overlay');
     apiKeyInput = document.getElementById('api-key-input');
     saveSettingsBtn = document.getElementById('save-settings-btn');
     closePanelBtn = document.getElementById('close-panel-btn');
+    toggleVisibilityBtn = document.getElementById('toggle-visibility-btn');
+    kpiContainer = document.getElementById('kpi-container');
+    chartContainer = document.getElementById('chart-container');
+    datatableContainer = document.getElementById('datatable-container');
+    reportContentContainer = document.getElementById('report-content-container');
 }
 
 function attachEventListeners() {
@@ -61,6 +96,7 @@ function attachEventListeners() {
     closePanelBtn.addEventListener('click', closeSettingsPanel);
     settingsOverlay.addEventListener('click', closeSettingsPanel);
     saveSettingsBtn.addEventListener('click', handleSaveSettings);
+    toggleVisibilityBtn.addEventListener('click', toggleApiKeyVisibility);
     csvFileInput.addEventListener('change', handleFileSelect);
     runAnalysisBtn.addEventListener('click', handleRunAnalysis);
     exportPdfBtn.addEventListener('click', handleExportPdf);
@@ -86,16 +122,15 @@ function log(message, data = null) {
     if (!debugLogContainer) return; // Guard against calls before DOM is ready
     const p = document.createElement('p');
     const timestamp = new Date().toLocaleTimeString();
-    p.innerHTML = `<span class="text-gray-500">${timestamp}:</span> ${message}`;
+    p.innerHTML = `<span>${timestamp}:</span> ${message}`;
     
     if (data) {
         const pre = document.createElement('pre');
-        pre.className = 'bg-gray-800 p-2 rounded mt-1 text-sm';
         pre.textContent = JSON.stringify(data, null, 2);
         p.appendChild(pre);
     }
     
-    const initialMessage = debugLogContainer.querySelector('.text-gray-400');
+    const initialMessage = debugLogContainer.querySelector('.placeholder-text');
     if (initialMessage) {
         debugLogContainer.innerHTML = '';
     }
@@ -110,21 +145,19 @@ async function renderTableList() {
     const tables = await listTables();
     tableListContainer.innerHTML = '';
     if (tables.length === 0) {
-        tableListContainer.innerHTML = '<p class="text-gray-500">No tables found.</p>';
+        tableListContainer.innerHTML = '<p class="placeholder-text">No tables found.</p>';
         return;
     }
 
     const ul = document.createElement('ul');
-    ul.className = 'space-y-1';
     tables.forEach(tableName => {
         const li = document.createElement('li');
-        li.className = 'flex justify-between items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer';
         li.textContent = tableName;
         li.dataset.tableName = tableName;
 
         const deleteBtn = document.createElement('button');
         deleteBtn.textContent = '✖';
-        deleteBtn.className = 'text-red-500 hover:text-red-700 font-bold';
+        deleteBtn.className = 'delete-btn';
         deleteBtn.onclick = async (e) => {
             e.stopPropagation();
             if (confirm(`Are you sure you want to delete the table "${tableName}"?`)) {
@@ -134,17 +167,89 @@ async function renderTableList() {
             }
         };
         li.appendChild(deleteBtn);
-        li.onclick = () => selectTable(tableName);
+        li.onclick = () => {
+            // Handle selection style
+            document.querySelectorAll('#table-list-container li').forEach(item => item.classList.remove('selected'));
+            li.classList.add('selected');
+            selectTable(tableName);
+        };
         ul.appendChild(li);
     });
     tableListContainer.appendChild(ul);
 }
 
-function renderDataTable(data) {
+function renderKPIs(data) {
+    if (!kpiContainer || !data || data.length === 0) {
+        kpiContainer.innerHTML = '';
+        return;
+    }
+
+    const totalRecords = data.length;
+    let totalPurchaseAmount = 0;
+    if (data[0] && data[0].hasOwnProperty('Total Purchase Amount (USD)')) {
+        totalPurchaseAmount = data.reduce((sum, row) => sum + (row['Total Purchase Amount (USD)'] || 0), 0);
+    }
+
+    const kpis = [
+        { title: 'Total Records', value: totalRecords },
+        { title: 'Total Purchase Amount', value: `$${totalPurchaseAmount.toFixed(2)}` },
+    ];
+
+    kpiContainer.innerHTML = kpis.map(kpi => `
+        <div class="kpi-card">
+            <div class="kpi-card__title">${kpi.title}</div>
+            <div class="kpi-card__value">${kpi.value}</div>
+        </div>
+    `).join('');
+}
+
+function renderMainChart(data) {
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+    chartContainer.innerHTML = '<canvas id="mainChart"></canvas>';
+    const canvas = document.getElementById('mainChart');
+    if (!canvas || !data || data.length === 0) return;
+
+    // Example: Charting the first two numeric columns
+    const headers = Object.keys(data[0]);
+    const labelColumn = headers[0];
+    let dataColumn = headers.find((h, i) => i > 0 && typeof data[0][h] === 'number');
+    if (!dataColumn) dataColumn = headers[1];
+
+
+    chartInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: data.map(row => row[labelColumn]),
+            datasets: [{
+                label: dataColumn,
+                data: data.map(row => row[dataColumn]),
+                backgroundColor: 'rgba(74, 144, 226, 0.6)',
+                borderColor: 'rgba(74, 144, 226, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function renderDataTable(data, container) {
     if (dataTableInstance) {
         dataTableInstance.destroy();
+        dataTableInstance = null;
     }
-    mainContentArea.innerHTML = '<table id="dataTable" class="display" width="100%"></table>';
+    
+    const targetContainer = container || reportContentContainer;
+    targetContainer.innerHTML = '<table id="dataTable" class="display" width="100%"></table>';
 
     if (!data || data.length === 0) return;
 
@@ -165,37 +270,51 @@ function renderDataTable(data) {
 }
 
 function renderReport(title, summary, chartConfig, dataForTable) {
-    if (dataTableInstance) {
-        dataTableInstance.destroy();
-        dataTableInstance = null;
-    }
-    mainContentArea.innerHTML = '';
+    if (dataTableInstance) dataTableInstance.destroy();
     if (chartInstance) chartInstance.destroy();
 
-    const titleEl = document.createElement('h3');
-    titleEl.className = 'text-2xl font-bold mb-2';
-    titleEl.id = 'reportTitle';
-    titleEl.textContent = title;
-    mainContentArea.appendChild(titleEl);
+    const reportContainer = document.getElementById('report-content-container');
+    const mainContentArea = document.getElementById('main-content-area');
+    
+    // Clear previous content and show the report container
+    const placeholder = mainContentArea.querySelector('.placeholder-text');
+    if (placeholder) {
+        placeholder.style.display = 'none';
+    }
+    reportContainer.innerHTML = '';
+    reportContainer.style.display = 'grid'; // Use grid layout defined in CSS
 
-    const summaryEl = document.createElement('p');
-    summaryEl.className = 'mb-4 text-gray-700';
-    summaryEl.id = 'reportSummary';
-    summaryEl.textContent = summary;
-    mainContentArea.appendChild(summaryEl);
+    // 1. Summary Card
+    const summaryCard = document.createElement('div');
+    summaryCard.className = 'report-summary-card';
+    summaryCard.innerHTML = `
+        <h3>Executive Summary</h3>
+        <p id="reportSummary">${summary}</p>
+    `;
+    reportContainer.appendChild(summaryCard);
 
-    const chartContainer = document.createElement('div');
-    chartContainer.className = 'w-full h-96 mx-auto mb-8';
-    const canvas = document.createElement('canvas');
-    chartContainer.appendChild(canvas);
-    mainContentArea.appendChild(chartContainer);
-
+    // 2. Chart Card
+    const chartCard = document.createElement('div');
+    chartCard.className = 'report-chart-card';
+    chartCard.innerHTML = `
+        <h3 id="reportTitle">${title}</h3>
+        <div class="report-chart-container">
+            <canvas id="reportChart"></canvas>
+        </div>
+    `;
+    reportContainer.appendChild(chartCard);
+    const canvas = chartCard.querySelector('#reportChart');
     chartInstance = new Chart(canvas, chartConfig);
 
-    const tableContainer = document.createElement('div');
-    tableContainer.id = 'report-table-container';
-    mainContentArea.appendChild(tableContainer);
-    renderDataTable(dataForTable);
+    // 3. Table Card
+    const tableCard = document.createElement('div');
+    tableCard.className = 'report-table-card';
+    tableCard.innerHTML = `
+        <h3>Detailed Data</h3>
+        <div id="report-table-container"></div>
+    `;
+    reportContainer.appendChild(tableCard);
+    renderDataTable(dataForTable, tableCard.querySelector('#report-table-container'));
 
     updateProgress('Report generated successfully!');
 }
@@ -209,13 +328,24 @@ function resetViewer() {
         dataTableInstance.destroy();
         dataTableInstance = null;
     }
-    mainContentArea.innerHTML = '<p class="text-gray-500">Select a table from the list to view its data or run an analysis.</p>';
+    if (chartInstance) {
+        chartInstance.destroy();
+        chartInstance = null;
+    }
+    kpiContainer.innerHTML = '';
+    chartContainer.innerHTML = '';
+    reportContentContainer.innerHTML = '<p class="placeholder-text">Select a table from the list to view its data or run an analysis.</p>';
+    progressContainer.classList.add('hidden');
+    aiSuggestionsContainer.classList.add('hidden');
 }
 
 function updateProgress(message, isError = false) {
+    progressContainer.classList.remove('hidden');
     const p = document.createElement('p');
     p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-    p.className = isError ? 'text-red-500 font-semibold' : 'text-gray-600';
+    if (isError) {
+        p.classList.add('error');
+    }
     progressContainer.appendChild(p);
     progressContainer.scrollTop = progressContainer.scrollHeight;
 }
@@ -251,15 +381,27 @@ async function handleSaveSettings() {
     }
 }
 
+function toggleApiKeyVisibility() {
+    if (apiKeyInput.type === 'password') {
+        apiKeyInput.type = 'text';
+        toggleVisibilityBtn.textContent = 'Hide';
+    } else {
+        apiKeyInput.type = 'password';
+        toggleVisibilityBtn.textContent = 'Show';
+    }
+}
+
 function handleFileSelect(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     progressContainer.innerHTML = '';
-    debugLogContainer.innerHTML = '<p class="text-gray-400">Log will appear here...</p>';
+    progressContainer.classList.remove('hidden');
+    debugLogContainer.innerHTML = '<p class="placeholder-text">Log will appear here...</p>';
     log('New file detected. Starting analysis...');
 
-    const previewWorker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+    const previewWorker = new Worker(workerUrl);
+
     let filePreview = [];
     previewWorker.postMessage({ file, preview: true });
 
@@ -344,7 +486,7 @@ async function runDataProcessingPipeline(file, schemaPlan) {
     updateProgress('Parsing full data file...');
     log('Parsing full data file via worker...');
     const fullData = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+        const worker = new Worker(workerUrl);
         let data = [];
         worker.postMessage({ file });
         worker.onmessage = (e) => {
@@ -513,7 +655,7 @@ async function processChildTable(tableName, tableDetails, fullData, lookupMaps, 
 
 function processFullFile(file, tableName) {
     updateProgress(`Processing full file for table "${tableName}"...`);
-    const mainWorker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+    const mainWorker = new Worker(workerUrl);
     let fullData = [];
     mainWorker.postMessage({ file });
 
@@ -541,10 +683,15 @@ async function selectTable(tableName) {
     viewerTitle.textContent = `Viewing: ${tableName}`;
     viewerActions.classList.remove('hidden');
     progressContainer.innerHTML = '';
+    progressContainer.classList.remove('hidden');
+    aiSuggestionsContainer.classList.add('hidden');
+    aiSuggestionsContainer.innerHTML = '';
     updateProgress(`Loading data for "${tableName}"...`);
     try {
         currentData = await loadDataFromTable(tableName);
-        renderDataTable(currentData);
+        renderKPIs(currentData);
+        renderMainChart(currentData);
+        renderDataTable(currentData, reportContentContainer);
         updateProgress('Data loaded successfully.');
     } catch (error) {
         updateProgress(`Failed to load data: ${error.message}`, true);
@@ -553,6 +700,7 @@ async function selectTable(tableName) {
 
 async function handleRunAnalysis() {
     progressContainer.innerHTML = '';
+    progressContainer.classList.remove('hidden');
     updateProgress('AI is analyzing the database to suggest reports...');
     try {
         const dbSchema = await loadDbSchema();
@@ -595,20 +743,18 @@ function renderReportSuggestions(suggestions) {
         dataTableInstance.destroy();
         dataTableInstance = null;
     }
-    mainContentArea.innerHTML = ''; // Clear main content area
-    aiSuggestionsContainer.innerHTML = ''; // Clear previous suggestions
+    reportContentContainer.innerHTML = '<p class="placeholder-text">Select a report suggestion to generate.</p>';
+    aiSuggestionsContainer.innerHTML = '';
+    aiSuggestionsContainer.classList.remove('hidden');
 
     const titleEl = document.createElement('h3');
-    titleEl.className = 'text-xl font-semibold mb-3'; // Adjusted class for better hierarchy
     titleEl.textContent = 'AI Report Suggestions:';
     aiSuggestionsContainer.appendChild(titleEl);
 
     const suggestionsGrid = document.createElement('div');
-    suggestionsGrid.className = 'flex flex-wrap gap-3'; // Use flex-wrap for a grid-like layout
-
     suggestions.forEach(suggestion => {
         const button = document.createElement('button');
-        button.className = 'ai-suggestion-card'; // Use the new class
+        button.className = 'ai-suggestion-card';
         button.textContent = suggestion.title;
         button.onclick = () => runReportExecution(suggestion);
         suggestionsGrid.appendChild(button);
@@ -735,11 +881,25 @@ async function runReportExecution(suggestion) {
             chartConfig.data.labels = finalUniformData.map(row => row[groupBy]);
             chartConfig.data.datasets[0].data = finalUniformData.map(row => row[newColumnName]);
             chartConfig.data.datasets[0].label = newColumnName;
+        } else if (finalUniformData.length > 0) {
+            // Fallback for non-aggregated data: use the first two columns
+            const headers = Object.keys(finalUniformData[0]);
+            if (headers.length >= 2) {
+                const labelCol = headers[0];
+                const dataCol = headers[1];
+                chartConfig.data.labels = finalUniformData.map(row => row[labelCol]);
+                chartConfig.data.datasets[0].data = finalUniformData.map(row => row[dataCol]);
+                chartConfig.data.datasets[0].label = dataCol;
+            }
         }
         
         updateProgress('Data processed. Generating final summary and chart...');
         
-        const context = { title: suggestion.title, description: suggestion.description };
+        const context = { 
+            title: suggestion.title, 
+            description: suggestion.description,
+            data: finalUniformData.slice(0, 20) // Pass a sample of the data for context
+        };
         const response = await agentManager.run('Summarizer', context);
         
         let summary = "Could not generate summary.";

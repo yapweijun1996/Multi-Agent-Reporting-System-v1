@@ -4,105 +4,91 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Multi-Agent Reporting System</title>
+  <link rel="stylesheet" href="src/style.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/2.0.8/css/dataTables.dataTables.css">
-  <script type="module" crossorigin src="/assets/index-skLo_9ci.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-BEniXvdv.css">
 </head>
 <body>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/2.0.8/js/dataTables.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script type="module" src="src/main.js"></script>
 
-  <div id="app" class="container">
-    <div class="header">
-      <h1>Multi-Agent Reporting System</h1>
-      <button id="settings-btn" class="button primary">Settings</button>
-    </div>
-
-    <!-- Main Content: Two-Column Layout -->
-    <div class="main-content">
-
-      <!-- Left Column: Database Management -->
-      <div class="column left-column card">
-        <h2>Database</h2>
-        
-        <!-- Upload New Table -->
-        <div class="upload-section section">
-            <label for="csvFile">Upload New CSV as Table</label>
-            <input type="file" id="csvFile" accept=".csv">
+  <div class="dashboard-container">
+    <header class="dashboard-header">
+        <h1>Intelligent ERP Dashboard</h1>
+        <div class="header-actions">
+            <button id="runAnalysisBtn" class="button success">Run AI Analysis</button>
+            <button id="settings-btn" class="button primary">Settings</button>
         </div>
-
-        <!-- Table List -->
-        <h3>Tables</h3>
-        <div id="table-list-container" class="table-list section">
-            <!-- Table list will be dynamically populated here -->
-            <p class="placeholder-text">No tables found.</p>
+    </header>
+    <aside class="dashboard-sidebar">
+        <div class="sidebar-content">
+            <h2>Tables</h2>
+            <div class="upload-section section">
+                <label for="csvFile">Upload New CSV</label>
+                <input type="file" id="csvFile" accept=".csv">
+            </div>
+            <div id="table-list-container" class="table-list-container section">
+                <!-- Table list will be dynamically populated here -->
+                <p class="placeholder-text">No tables found.</p>
+            </div>
         </div>
-      </div>
-
-      <!-- Right Column: Viewer and Reporting -->
-      <div class="column right-column">
-        <!-- Data/Report Viewer -->
-        <div class="viewer-section card">
+    </aside>
+    <main class="dashboard-main">
+        <div id="kpi-container" class="kpi-container">
+            <!-- KPI cards will be dynamically populated here -->
+        </div>
+        <div id="chart-container" class="chart-container card">
+            <!-- Chart will be dynamically populated here -->
+        </div>
+        <div id="datatable-container" class="datatable-container card">
             <div class="viewer-header">
                 <h2 id="viewer-title">Select a Table</h2>
                 <div id="viewer-actions" class="hidden">
-                    <button id="runAnalysisBtn" class="button success">Run AI Analysis</button>
                     <button id="exportPdfBtn" class="button info">Export PDF</button>
                 </div>
             </div>
-
-            <!-- Progress Tracker -->
-            <div id="progress-container" class="progress-tracker">
-                <!-- Progress steps will be dynamically added here -->
-            </div>
-            
-            <!-- AI Suggestions Container -->
-            <div id="ai-suggestions-container" class="ai-suggestions-container">
-                <!-- AI suggestions will be dynamically populated here -->
-            </div>
-
-            <!-- Main Content Area: Data Table or Report -->
-            <div id="main-content-area" class="main-content-area">
-                <p class="placeholder-text">Select a table from the list to view its data or run an analysis.</p>
-                <!-- DataTable will be injected here -->
+            <div id="report-content-container" class="report-container">
+                <!-- The report will be structured here: Summary, Chart, and Table -->
             </div>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Debug Log -->
-  <div class="debug-log-container">
-      <h2>Execution Log</h2>
-      <div id="debug-log-container" class="debug-log">
-          <p class="placeholder-text">Log will appear here...</p>
-      </div>
+    </main>
+    <footer class="dashboard-footer">
+        <div id="progress-container" class="progress-tracker hidden"></div>
+        <div id="debug-log-container" class="debug-log-container">
+            <h2>Execution Log</h2>
+            <div id="debug-log" class="debug-log">
+                <p class="placeholder-text">Log will appear here...</p>
+            </div>
+        </div>
+    </footer>
   </div>
 
   <!-- Settings Panel -->
-  <div id="settings-overlay" class="settings-overlay"></div>
-  <div id="settings-panel" class="settings-panel">
-      <div class="settings-panel-content">
-          <div class="settings-header">
-              <h3>Settings</h3>
-              <button id="close-panel-btn" class="close-button">
-                  <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                  </svg>
-              </button>
-          </div>
-          <form id="settings-form" class="settings-form">
-              <div class="form-group">
-                  <div>
-                      <label for="api-key-input">Google AI API Key</label>
-                      <input type="password" id="api-key-input" placeholder="Enter your API key" autocomplete="current-password">
-                  </div>
-              </div>
-              <div class="form-actions">
-                  <button type="button" id="save-settings-btn" class="button primary">
-                      Save Configuration
-                  </button>
-              </div>
-          </form>
+  <div id="settings-overlay" class="settings-overlay hidden"></div>
+  <div id="settings-panel" class="settings-panel translate-x-full">
+    <div class="settings-panel-content">
+      <div class="settings-header">
+        <h3>Settings</h3>
+        <button id="close-panel-btn" class="close-button">&times;</button>
       </div>
+      <form id="settings-form" class="settings-form">
+        <div class="form-group">
+          <label for="api-key-input">Google AI API Key</label>
+          <p class="api-key-description">
+            Your API key is stored securely in your browser's local storage and is never transmitted elsewhere.
+          </p>
+          <div class="input-group">
+            <input type="password" id="api-key-input" placeholder="Enter your Google AI API key" autocomplete="off">
+            <button type="button" id="toggle-visibility-btn" class="toggle-visibility-btn">Show</button>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" id="save-settings-btn" class="button primary">Save Configuration</button>
+        </div>
+      </form>
+    </div>
   </div>
 
 </body>

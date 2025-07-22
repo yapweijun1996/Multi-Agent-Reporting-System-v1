@@ -12,8 +12,18 @@ class SummarizerAgent extends BaseAgent {
      * @override
      */
     getPrompt(context) {
-        const { title, description } = context;
-        return `The user generated a report titled "${title}". Based on this title and the report's description ("${description}"), write a brief, one-paragraph summary of the likely key insight. This is a placeholder for a more complex data analysis step.`;
+        const { title, description, data } = context;
+        return `You are a data summarization AI.
+A report has been generated with the following details:
+- **Title:** "${title}"
+- **Description:** "${description}"
+
+Here is a sample of the data from the report (up to 20 rows):
+\`\`\`json
+${JSON.stringify(data, null, 2)}
+\`\`\`
+
+Based on the title, description, AND the data provided, write a brief, insightful, one-paragraph summary of the key findings. Focus on the most important trends or points revealed by the data.`;
     }
 
     /**

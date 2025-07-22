@@ -6,9 +6,9 @@ const API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
 export class AIService {
     /**
      * @param {string} apiKey - The API key for authentication.
-     * @param {string} [model="gemini-1.5-flash"] - The model to use.
+     * @param {string} [model="gemini-2.5-flash"] - The model to use.
      */
-    constructor(apiKey, model = 'gemini-1.5-flash') {
+    constructor(apiKey, model = 'gemini-2.5-flash') {
         if (!apiKey) {
             throw new Error('API key is required to initialize AIService.');
         }
