@@ -58,7 +58,8 @@ let dataTableInstance = null;
 let csvFileInput, tableListContainer, viewerTitle, viewerActions, runAnalysisBtn,
     exportPdfBtn, progressContainer, aiSuggestionsContainer, debugLogContainer,
     settingsBtn, settingsPanel, settingsOverlay, apiKeyInput, saveSettingsBtn, closePanelBtn,
-    toggleVisibilityBtn, kpiContainer, chartContainer, datatableContainer, reportContentContainer;
+    toggleVisibilityBtn, kpiContainer, chartContainer, datatableContainer, reportContentContainer,
+    fileNameDisplay;
 
 // --- CORE INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -70,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function assignDOMElements() {
     csvFileInput = document.getElementById('csvFile');
+    fileNameDisplay = document.getElementById('file-name-display');
     tableListContainer = document.getElementById('table-list-container');
     viewerTitle = document.getElementById('viewer-title');
     viewerActions = document.getElementById('viewer-actions');
@@ -141,34 +143,116 @@ function log(message, data = null) {
 
 // --- UI RENDERING ---
 
+function renderSkeletonLoader() {
+    tableListContainer.innerHTML = `
+        <div class="table-list-skeleton">
+            <div class="skeleton-item"></div>
+            <div class="skeleton-item"></div>
+            <div class="skeleton-item"></div>
+        </div>
+    `;
+}
+
+function renderEmptyState() {
+    tableListContainer.innerHTML = `
+        <div class="placeholder-text">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 17.58A5 5 0 0 0 15.42 22h-1.84a5 5 0 0 0-4.58-4.42"></path><path d="M12 12.58A5 5 0 0 0 7.42 17h-1.84a5 5 0 0 0-4.58-4.42"></path><path d="M8 7.58A5 5 0 0 0 3.42 12h-1.84a5 5 0 0 0-4.58-4.42"></path><path d="M16 2.58A5 5 0 0 0 11.42 7h-1.84a5 5 0 0 0-4.58-4.42"></path></svg>
+            <span>No tables yet. Upload a CSV to get started.</span>
+        </div>
+    `;
+}
+
 async function renderTableList() {
+    renderSkeletonLoader();
     const tables = await listTables();
+    
+    // A short delay to make the loader visible and improve perceived performance
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     tableListContainer.innerHTML = '';
     if (tables.length === 0) {
-        tableListContainer.innerHTML = '<p class="placeholder-text">No tables found.</p>';
+        renderEmptyState();
         return;
     }
 
     const ul = document.createElement('ul');
+    ul.className = 'table-list';
     tables.forEach(tableName => {
         const li = document.createElement('li');
-        li.textContent = tableName;
         li.dataset.tableName = tableName;
 
+        // Table Icon
+        const tableIcon = document.createElement('span');
+        tableIcon.className = 'table-icon';
+        tableIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v4H4zM4 12h16v4H4zM4 20h16v4H4z"/></svg>`;
+
+        const tableNameSpan = document.createElement('span');
+        tableNameSpan.className = 'table-name';
+        tableNameSpan.textContent = tableName;
+
+        const leftContainer = document.createElement('div');
+        leftContainer.className = 'table-item-left';
+        leftContainer.appendChild(tableIcon);
+        leftContainer.appendChild(tableNameSpan);
+
+        const actionContainer = document.createElement('div');
+        actionContainer.className = 'action-container';
+
         const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = '✖';
         deleteBtn.className = 'delete-btn';
-        deleteBtn.onclick = async (e) => {
+        deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+        
+        const confirmContainer = document.createElement('div');
+        confirmContainer.className = 'delete-confirm-container';
+        confirmContainer.style.display = 'none';
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'confirm-delete-btn';
+        confirmBtn.textContent = 'Confirm';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'cancel-delete-btn';
+        cancelBtn.textContent = 'Cancel';
+
+        confirmContainer.appendChild(confirmBtn);
+        confirmContainer.appendChild(cancelBtn);
+
+        actionContainer.appendChild(deleteBtn);
+        actionContainer.appendChild(confirmContainer);
+
+        deleteBtn.onclick = (e) => {
             e.stopPropagation();
-            if (confirm(`Are you sure you want to delete the table "${tableName}"?`)) {
+            li.classList.add('deleting');
+            deleteBtn.style.display = 'none';
+            confirmContainer.style.display = 'flex';
+        };
+
+        cancelBtn.onclick = (e) => {
+            e.stopPropagation();
+            li.classList.remove('deleting');
+            deleteBtn.style.display = 'flex';
+            confirmContainer.style.display = 'none';
+        };
+
+        confirmBtn.onclick = async (e) => {
+            e.stopPropagation();
+            li.classList.add('fading-out');
+            
+            // Wait for animation to complete before deleting
+            setTimeout(async () => {
                 await deleteTable(tableName);
                 await renderTableList();
                 if (currentTable === tableName) resetViewer();
-            }
+            }, 300);
         };
-        li.appendChild(deleteBtn);
+        
+        li.appendChild(leftContainer);
+        li.appendChild(actionContainer);
+
         li.onclick = () => {
-            // Handle selection style
+            // Prevent selection if delete is in progress
+            if (li.classList.contains('deleting')) return;
+
             document.querySelectorAll('#table-list-container li').forEach(item => item.classList.remove('selected'));
             li.classList.add('selected');
             selectTable(tableName);
@@ -397,7 +481,11 @@ function toggleApiKeyVisibility() {
 
 function handleFileSelect(event) {
     const file = event.target.files[0];
-    if (!file) return;
+    if (!file) {
+        fileNameDisplay.textContent = '';
+        return;
+    }
+    fileNameDisplay.textContent = file.name;
 
     progressContainer.innerHTML = '';
     progressContainer.classList.remove('hidden');
@@ -810,7 +898,7 @@ async function runReportExecution(suggestion) {
         reportContentContainer.style.display = 'grid';
     }
     if (datatableContainer) {
-        datatableContainer.style.display = 'none';
+        datatableContainer.style.display = 'block';
     }
     if (kpiContainer) {
         kpiContainer.style.display = 'none';

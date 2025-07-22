@@ -24,10 +24,14 @@
     </header>
     <aside class="dashboard-sidebar">
         <div class="sidebar-content">
-            <h2>Tables</h2>
+            <h2 class="sidebar-title">Tables</h2>
             <div class="upload-section section">
-                <label for="csvFile">Upload New CSV</label>
+                <label for="csvFile" class="button primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="upload-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    Upload CSV
+                </label>
                 <input type="file" id="csvFile" accept=".csv">
+                <span id="file-name-display" class="file-name-display"></span>
             </div>
             <div id="table-list-container" class="table-list-container section">
                 <!-- Table list will be dynamically populated here -->

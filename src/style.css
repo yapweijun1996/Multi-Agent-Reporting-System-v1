@@ -62,6 +62,10 @@ p {
     font-size: 12px;
 }
 
+ul {
+    padding: 0px;
+}
+
 /* Base styles */
 body {
     font-family: var(--font-family-sans);
@@ -196,6 +200,25 @@ body {
     padding: var(--spacing-xl);
     border-right: 1px solid var(--border-color);
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.sidebar-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-color-primary);
+    margin-bottom: var(--spacing-xl);
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 1px solid var(--border-color);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
 }
 
 .dashboard-main {
@@ -252,29 +275,47 @@ h2, h3 {
 }
 
 /* Upload Section */
-.upload-section label {
-    display: block;
-    font-size: 12px;
-    color: var(--text-color-secondary);
-    margin-bottom: var(--spacing-sm);
-    font-weight: 500;
+.upload-section {
+    position: relative;
 }
 
-.upload-section input[type="file"] {
+.upload-section .button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-md);
     width: 100%;
-    padding: var(--spacing-md);
-    border: 1px dashed var(--border-color);
-    border-radius: var(--border-radius-md);
-    background-color: var(--bg-color-primary);
-    font-size: 12px;
-    color: var(--text-color-primary);
-    cursor: pointer;
+}
+
+.upload-icon {
     transition: var(--transition-fast);
 }
 
-.upload-section input[type="file"]:hover {
-    border-color: var(--primary-color);
-    background-color: var(--bg-color-tertiary);
+.upload-section .button:hover .upload-icon {
+    transform: translateY(-2px);
+}
+
+.upload-section input[type="file"] {
+    /* Hide the default input but keep it accessible */
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.file-name-display {
+    display: block;
+    margin-top: var(--spacing-md);
+    font-size: 12px;
+    color: var(--text-color-muted);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 12px;
 }
 
 /* Table List */
@@ -286,56 +327,106 @@ h2, h3 {
 }
 
 .table-list-container {
-    padding: var(--spacing-sm);
+    flex-grow: 1;
+    overflow-y: auto;
+    margin-top: var(--spacing-lg);
+    border: none;
+    background-color: transparent;
 }
 
 .table-list ul {
     list-style: none;
     padding: 0;
     margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
 }
 
 .table-list li {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--spacing-md);
-    margin-bottom: var(--spacing-sm);
-    background-color: var(--bg-color-secondary);
-    border-radius: var(--border-radius-md);
+    padding: var(--spacing-lg) var(--spacing-md);
+    background-color: transparent;
     color: var(--text-color-secondary);
     cursor: pointer;
-    transition: var(--transition-fast);
-    border: 1px solid transparent;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    border-radius: var(--border-radius-md);
+    position: relative;
+}
+
+.table-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 0;
+    background-color: var(--primary-color);
+    border-radius: 3px;
+    transition: height 0.2s ease;
 }
 
 .table-list li:hover {
     background-color: var(--bg-color-tertiary);
     color: var(--text-color-primary);
-    transform: translateX(5px);
+}
+
+.table-list li:hover .delete-btn {
+    opacity: 1;
+    transform: scale(1);
 }
 
 .table-list li.selected {
-    background-color: var(--primary-color);
+    background-color: var(--bg-color-tertiary);
     color: #fff;
-    font-weight: 600;
-    border-left: 4px solid var(--success-color);
+    font-weight: 500;
+}
+
+.table-list li.selected::before {
+    height: 60%;
+}
+
+.table-list li.selected .table-icon,
+.table-list li.selected .table-name {
+    color: var(--primary-color);
 }
 
 .table-list li .delete-btn {
     background: none;
     border: none;
-    color: var(--danger-color);
-    font-size: 12px;
+    color: var(--text-color-muted);
     cursor: pointer;
-    transition: var(--transition-fast);
-    opacity: 0.7;
+    transition: all 0.2s ease;
+    opacity: 0;
+    transform: scale(0.9);
+    padding: var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .table-list li .delete-btn:hover {
-    color: var(--danger-color-dark);
-    transform: scale(1.2);
-    opacity: 1;
+    color: var(--danger-color);
+    background-color: rgba(231, 76, 60, 0.1);
+}
+
+.table-item-left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.table-icon {
+    color: var(--text-color-muted);
+    transition: var(--transition-fast);
+}
+
+.table-name {
+    transition: var(--transition-fast);
 }
 
 .placeholder-text {
@@ -344,6 +435,85 @@ h2, h3 {
     text-align: center;
     padding: var(--spacing-xl);
     font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-lg);
+    height: 100%;
+}
+
+.placeholder-text svg {
+    width: 48px;
+    height: 48px;
+    stroke-width: 1.5;
+}
+
+.table-list-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.skeleton-item {
+    height: 40px;
+    background-color: var(--bg-color-tertiary);
+    border-radius: var(--border-radius-md);
+    animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: .5;
+    }
+}
+
+.delete-confirm-container {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.confirm-delete-btn, .cancel-delete-btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.confirm-delete-btn {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.confirm-delete-btn:hover {
+    background-color: var(--danger-color-dark);
+}
+
+.cancel-delete-btn {
+    background-color: var(--bg-color-tertiary);
+    color: var(--text-color-secondary);
+}
+
+.cancel-delete-btn:hover {
+    background-color: #555;
+}
+
+.table-list li.deleting {
+    background-color: rgba(231, 76, 60, 0.1);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    opacity: 1;
+    transform: scale(1);
+}
+
+.table-list li.fading-out {
+    opacity: 0;
+    transform: scale(0.95);
 }
 
 /* DataTables styles */
