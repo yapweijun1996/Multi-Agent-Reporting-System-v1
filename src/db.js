@@ -201,3 +201,28 @@ export async function loadDbSchema() {
         request.onerror = (event) => reject(event.target.error);
     });
 }
+
+// --- Generic Configuration Management ---
+export async function saveConfiguration(key, value) {
+  const dbInstance = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = dbInstance.transaction([CONFIG_STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(CONFIG_STORE_NAME);
+    store.put({ id: key, value: value });
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = (event) => reject(event.target.error);
+  });
+}
+
+export async function getConfiguration(key) {
+  const dbInstance = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = dbInstance.transaction([CONFIG_STORE_NAME], 'readonly');
+    const store = transaction.objectStore(CONFIG_STORE_NAME);
+    const request = store.get(key);
+    request.onsuccess = (event) => {
+        resolve(event.target.result ? event.target.result.value : null);
+    };
+    request.onerror = (event) => reject(event.target.error);
+  });
+}

@@ -3,8 +3,6 @@ import jsPDF from 'jspdf';
 import $ from 'jquery';
 import DataTable from 'datatables.net-dt';
 import {
-    saveApiKey,
-    loadApiKey,
     listTables,
     saveTableData,
     updateTableList,
@@ -12,32 +10,80 @@ import {
     deleteTable,
     getTableSchemas,
     saveDbSchema,
-    loadDbSchema
+    loadDbSchema,
+    saveConfiguration,
+    getConfiguration
 } from './db.js';
+import { agentManager } from './agents/agent-manager.js';
 
 Chart.register(...registerables);
 
 // --- STATE MANAGEMENT ---
-let apiKey = '';
 let chartInstance = null;
 let currentTable = null;
 let currentData = [];
 let dataTableInstance = null;
 
-// --- DOM ELEMENTS ---
-const apiKeyInput = document.getElementById('apiKey');
-const csvFileInput = document.getElementById('csvFile');
-const tableListContainer = document.getElementById('table-list-container');
-const viewerTitle = document.getElementById('viewer-title');
-const viewerActions = document.getElementById('viewer-actions');
-const runAnalysisBtn = document.getElementById('runAnalysisBtn');
-const exportPdfBtn = document.getElementById('exportPdfBtn');
-const progressContainer = document.getElementById('progress-container');
-const mainContentArea = document.getElementById('main-content-area');
-const debugLogContainer = document.getElementById('debug-log-container');
+// --- DOM ELEMENT VARIABLES ---
+let csvFileInput, tableListContainer, viewerTitle, viewerActions, runAnalysisBtn,
+    exportPdfBtn, progressContainer, aiSuggestionsContainer, mainContentArea, debugLogContainer,
+    settingsBtn, settingsPanel, settingsOverlay, apiKeyInput, saveSettingsBtn, closePanelBtn;
+
+// --- CORE INITIALIZATION ---
+document.addEventListener('DOMContentLoaded', () => {
+    // This is the single entry point for all DOM-related code.
+    assignDOMElements();
+    attachEventListeners();
+    initializeApplication();
+});
+
+function assignDOMElements() {
+    csvFileInput = document.getElementById('csvFile');
+    tableListContainer = document.getElementById('table-list-container');
+    viewerTitle = document.getElementById('viewer-title');
+    viewerActions = document.getElementById('viewer-actions');
+    runAnalysisBtn = document.getElementById('runAnalysisBtn');
+    exportPdfBtn = document.getElementById('exportPdfBtn');
+    progressContainer = document.getElementById('progress-container');
+    aiSuggestionsContainer = document.getElementById('ai-suggestions-container');
+    mainContentArea = document.getElementById('main-content-area');
+    debugLogContainer = document.getElementById('debug-log-container');
+    settingsBtn = document.getElementById('settings-btn');
+    settingsPanel = document.getElementById('settings-panel');
+    settingsOverlay = document.getElementById('settings-overlay');
+    apiKeyInput = document.getElementById('api-key-input');
+    saveSettingsBtn = document.getElementById('save-settings-btn');
+    closePanelBtn = document.getElementById('close-panel-btn');
+}
+
+function attachEventListeners() {
+    settingsBtn.addEventListener('click', openSettingsPanel);
+    closePanelBtn.addEventListener('click', closeSettingsPanel);
+    settingsOverlay.addEventListener('click', closeSettingsPanel);
+    saveSettingsBtn.addEventListener('click', handleSaveSettings);
+    csvFileInput.addEventListener('change', handleFileSelect);
+    runAnalysisBtn.addEventListener('click', handleRunAnalysis);
+    exportPdfBtn.addEventListener('click', handleExportPdf);
+}
+
+async function initializeApplication() {
+    try {
+        const savedKey = await getConfiguration('apiKey');
+        if (savedKey && apiKeyInput) {
+            apiKeyInput.value = savedKey;
+        }
+        await agentManager.initialize();
+    } catch (error) {
+        console.error('Failed to load API key or initialize agents:', error);
+        log('Failed to initialize application', error);
+    }
+    await renderTableList();
+}
+
 
 // --- LOGGING ---
 function log(message, data = null) {
+    if (!debugLogContainer) return; // Guard against calls before DOM is ready
     const p = document.createElement('p');
     const timestamp = new Date().toLocaleTimeString();
     p.innerHTML = `<span class="text-gray-500">${timestamp}:</span> ${message}`;
@@ -49,7 +95,6 @@ function log(message, data = null) {
         p.appendChild(pre);
     }
     
-    // Clear initial message if it exists
     const initialMessage = debugLogContainer.querySelector('.text-gray-400');
     if (initialMessage) {
         debugLogContainer.innerHTML = '';
@@ -58,55 +103,6 @@ function log(message, data = null) {
     debugLogContainer.appendChild(p);
     debugLogContainer.scrollTop = debugLogContainer.scrollHeight;
 }
-
-
-// --- SIMPLIFIED AI SDK ---
-const { GoogleGenerativeAI } = {
-    GoogleGenerativeAI: class {
-        constructor(apiKey) { this.apiKey = apiKey; }
-        getGenerativeModel({ model }) {
-            return { startChat: () => new ChatSession(this.apiKey, model) };
-        }
-    }
-};
-
-class ChatSession {
-    constructor(apiKey, model) {
-        this.apiKey = apiKey;
-        this.model = model;
-        this.history = [];
-        this.apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
-    }
-
-    async sendMessage(prompt) {
-        const fullHistory = [...this.history, { role: 'user', parts: [{ text: prompt }] }];
-        const response = await fetch(this.apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: fullHistory }),
-        });
-        if (!response.ok) throw new Error(`API call failed: ${response.status}`);
-        const data = await response.json();
-        const text = data.candidates[0].content.parts[0].text;
-        this.history.push({ role: 'user', parts: [{ text: prompt }] });
-        this.history.push({ role: 'model', parts: [{ text: text }] });
-        return { response: { text: () => text } };
-    }
-}
-
-// --- INITIALIZATION ---
-window.addEventListener('load', async () => {
-    try {
-        const savedKey = await loadApiKey();
-        if (savedKey) {
-            apiKeyInput.value = savedKey;
-            apiKey = savedKey;
-        }
-    } catch (error) {
-        console.error('Failed to load API key:', error);
-    }
-    await renderTableList();
-});
 
 // --- UI RENDERING ---
 
@@ -196,12 +192,10 @@ function renderReport(title, summary, chartConfig, dataForTable) {
 
     chartInstance = new Chart(canvas, chartConfig);
 
-    // Render the data table with the final (potentially aggregated) data
     const tableContainer = document.createElement('div');
     tableContainer.id = 'report-table-container';
     mainContentArea.appendChild(tableContainer);
     renderDataTable(dataForTable);
-
 
     updateProgress('Report generated successfully!');
 }
@@ -226,23 +220,43 @@ function updateProgress(message, isError = false) {
     progressContainer.scrollTop = progressContainer.scrollHeight;
 }
 
-// --- WORKFLOWS ---
+// --- EVENT HANDLERS ---
 
-apiKeyInput.addEventListener('change', () => saveApiKey(apiKeyInput.value));
+function openSettingsPanel() {
+    console.log('Opening settings panel...');
+    settingsOverlay.classList.remove('hidden');
+    settingsPanel.classList.remove('translate-x-full');
+}
 
-csvFileInput.addEventListener('change', async (event) => {
+function closeSettingsPanel() {
+    console.log('Closing settings panel...');
+    settingsOverlay.classList.add('hidden');
+    settingsPanel.classList.add('translate-x-full');
+}
+
+async function handleSaveSettings() {
+    const newApiKey = apiKeyInput.value.trim();
+    if (newApiKey) {
+        try {
+            await saveConfiguration('apiKey', newApiKey);
+            await agentManager.initialize(); // Re-initialize with the new key
+            alert('API Key saved successfully!');
+            closeSettingsPanel();
+        } catch (error) {
+            console.error('Failed to save API key:', error);
+            alert('Error saving API key.');
+        }
+    } else {
+        alert('Please enter an API key.');
+    }
+}
+
+function handleFileSelect(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    apiKey = apiKeyInput.value;
-    if (!apiKey) {
-        alert('Please enter your API key first.');
-        csvFileInput.value = '';
-        return;
-    }
-
     progressContainer.innerHTML = '';
-    debugLogContainer.innerHTML = '<p class="text-gray-400">Log will appear here...</p>'; // Reset log
+    debugLogContainer.innerHTML = '<p class="text-gray-400">Log will appear here...</p>';
     log('New file detected. Starting analysis...');
 
     const previewWorker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
@@ -257,28 +271,30 @@ csvFileInput.addEventListener('change', async (event) => {
             previewWorker.terminate();
             try {
                 updateProgress('AI analysis complete. Generating database schema...');
-                const schemaPlan = await getAiDatabaseSchemaPlan(filePreview);
-                log("Received schema plan from AI Architect:", schemaPlan);
-                
-                // The schema is nested inside the response
-                const dbSchema = schemaPlan.schema;
-                
-                // Update user-facing progress
-                let planSummary = "AI Database Architect Plan:\n";
-                if (dbSchema) {
-                    Object.entries(dbSchema).forEach(([tableName, tableDetails]) => {
-                        planSummary += `- Table: '${tableName}' (PK: ${tableDetails.primary_key}, Natural Key: [${tableDetails.natural_key_for_uniqueness.join(', ')}])\n`;
-                    });
+                const context = { headers: Object.keys(filePreview[0]) };
+                const response = await agentManager.run('Database Architect', context);
+
+                if (response.success) {
+                    const schemaPlan = response.data;
+                    log("Received schema plan from AI Architect:", schemaPlan);
+                    const dbSchema = schemaPlan.schema;
+                    let planSummary = "AI Database Architect Plan:\n";
+                    if (dbSchema) {
+                        Object.entries(dbSchema).forEach(([tableName, tableDetails]) => {
+                            planSummary += `- Table: '${tableName}' (PK: ${tableDetails.primary_key}, Natural Key: [${tableDetails.natural_key_for_uniqueness.join(', ')}])\n`;
+                        });
+                    }
+                    updateProgress(planSummary);
+                    runDataProcessingPipeline(file, schemaPlan);
+                } else {
+                    updateProgress(`AI Architect failed: ${response.error}`, true);
+                    log(`AI Architect failed: ${response.error}`);
+                    const tableName = prompt('AI Architect failed. Please enter a single table name for this file:', file.name.replace(/\.csv$/, ''));
+                    if (tableName) processFullFile(file, tableName);
                 }
-                updateProgress(planSummary);
-
-                runDataProcessingPipeline(file, schemaPlan);
-
             } catch (error) {
-                updateProgress(`AI Architect failed: ${error.message}`, true);
-                log(`AI Architect failed: ${error.message}`, error);
-                const tableName = prompt('AI Architect failed. Please enter a single table name for this file:', file.name.replace(/\.csv$/, ''));
-                if (tableName) processFullFile(file, tableName);
+                updateProgress(`Error during AI analysis: ${error.message}`, true);
+                log(`Error during AI analysis: ${error.message}`, error);
             }
         } else if (type === 'error') {
             log(`Error parsing file preview: ${e.data.payload.message}`, e.data.payload);
@@ -286,7 +302,7 @@ csvFileInput.addEventListener('change', async (event) => {
             previewWorker.terminate();
         }
     };
-});
+}
 
 function determineExecutionOrder(schemaPlan) {
     const schema = schemaPlan.schema;
@@ -323,10 +339,8 @@ async function runDataProcessingPipeline(file, schemaPlan) {
         return;
     }
 
-    // This object will hold all the lookup maps generated by the processors.
     const lookupMaps = {};
 
-    // 1. Parse the full CSV file once using the worker.
     updateProgress('Parsing full data file...');
     log('Parsing full data file via worker...');
     const fullData = await new Promise((resolve, reject) => {
@@ -357,7 +371,6 @@ async function runDataProcessingPipeline(file, schemaPlan) {
         return;
     }
 
-    // 2. Loop through the execution order and process each table.
     for (const tableName of executionOrder) {
         const tableDetails = dbSchema[tableName];
         if (!tableDetails) {
@@ -369,26 +382,20 @@ async function runDataProcessingPipeline(file, schemaPlan) {
         let returnedMap;
 
         try {
-            // Conditionally call the correct processor.
             if (Object.keys(tableDetails.foreign_keys).length === 0) {
-                // This is a parent table.
                 returnedMap = await processParentTable(tableName, tableDetails, fullData);
             } else {
-                // This is a child table; it needs the lookup maps from its parents.
                 returnedMap = await processChildTable(tableName, tableDetails, fullData, lookupMaps, dbSchema);
             }
-            // Store the returned map for subsequent child tables.
             lookupMaps[tableName] = returnedMap;
             updateProgress(`Successfully processed and saved data for ${tableName}.`);
         } catch (error) {
             log(`Error processing table '${tableName}':`, error);
             updateProgress(`Failed to process table '${tableName}': ${error.message}`, true);
-            // Halt the pipeline on error
             return;
         }
     }
 
-    // 3. Perform final actions after the loop completes.
     log('All tables processed. Finalizing pipeline.');
     await saveDbSchema(dbSchema);
     log('Full database schema saved.');
@@ -397,7 +404,6 @@ async function runDataProcessingPipeline(file, schemaPlan) {
     await renderTableList();
     log('UI table list updated.');
 
-    // Auto-select the last processed table for user convenience.
     if (executionOrder.length > 0) {
         selectTable(executionOrder[executionOrder.length - 1]);
     }
@@ -427,14 +433,8 @@ async function processParentTable(tableName, tableDetails, fullData) {
 
     for (const [naturalKey, uniqueRow] of uniqueRows.entries()) {
         const generatedId = `${tableName}_${idCounter++}`;
-        
-        // Add the generated ID to the row data
         const rowWithId = { ...uniqueRow, generated_id: generatedId };
-        
-        // Build the lookup map
         lookupMap[naturalKey] = generatedId;
-
-        // Filter the row to only include columns defined in the schema
         const finalRow = {};
         for (const col of tableDetails.columns) {
             if (rowWithId.hasOwnProperty(col)) {
@@ -444,39 +444,30 @@ async function processParentTable(tableName, tableDetails, fullData) {
         finalRows.push(finalRow);
     }
     
-    // Log a sample of the lookup map for debugging
     const lookupSample = Object.fromEntries(Object.entries(lookupMap).slice(0, 5));
     log(`Generated lookup map for '${tableName}'. Sample:`, lookupSample);
     
-    // Save the processed data to the database
     await saveTableData(tableName, finalRows);
     log(`Saved ${finalRows.length} processed rows to table '${tableName}'.`);
 
-    // The lookup map is returned for use by child-table processing agents
     return lookupMap;
 }
 
 async function processChildTable(tableName, tableDetails, fullData, lookupMaps, dbSchema) {
     log(`Processing child table: ${tableName}...`);
 
-    // Step 1: Populate foreign keys on a copy of the full dataset first.
-    // This is critical for de-duplication to work correctly on composite natural keys.
     const enrichedData = fullData.map(row => {
         const processedRow = { ...row };
-
         for (const [fkColumn, parentInfo] of Object.entries(tableDetails.foreign_keys)) {
             const [parentTableName] = parentInfo.split('.');
             const parentTableDetails = dbSchema[parentTableName];
-
             if (!parentTableDetails || !lookupMaps[parentTableName]) {
                 log(`  WARNING: Prerequisite data for FK '${fkColumn}' -> '${parentTableName}' is missing. Skipping.`);
                 continue;
             }
-
             const parentNaturalKeyCols = parentTableDetails.natural_key_for_uniqueness;
             const parentLookupKey = parentNaturalKeyCols.map(keyCol => processedRow[keyCol]).join('|');
             const parentLookupMap = lookupMaps[parentTableName];
-
             if (parentLookupMap.hasOwnProperty(parentLookupKey)) {
                 processedRow[fkColumn] = parentLookupMap[parentLookupKey];
             }
@@ -485,8 +476,6 @@ async function processChildTable(tableName, tableDetails, fullData, lookupMaps, 
     });
     log(`Step 1 Complete: Populated foreign keys for ${enrichedData.length} rows.`);
 
-
-    // Step 2: Perform de-duplication on the now-enriched data.
     const uniqueRows = new Map();
     const naturalKeyCols = tableDetails.natural_key_for_uniqueness;
 
@@ -498,23 +487,15 @@ async function processChildTable(tableName, tableDetails, fullData, lookupMaps, 
     }
     log(`Step 2 Complete: Found ${uniqueRows.size} unique rows for '${tableName}'.`);
 
-
-    // Step 3: Process the unique rows to generate IDs, create a lookup map, and save.
     const lookupMap = {};
     const finalRows = [];
     let idCounter = 1;
 
     for (const [naturalKey, uniqueRow] of uniqueRows.entries()) {
         const processedRow = { ...uniqueRow };
-
-        // Generate ID for this table's record
         const generatedId = `${tableName}_${idCounter++}`;
         processedRow.generated_id = generatedId;
-
-        // Create a lookup map for this table, to be used by its own children (if any)
         lookupMap[naturalKey] = generatedId;
-
-        // Filter down to only the columns specified in the schema
         const finalRow = {};
         for (const col of tableDetails.columns) {
             if (processedRow.hasOwnProperty(col)) {
@@ -524,11 +505,9 @@ async function processChildTable(tableName, tableDetails, fullData, lookupMaps, 
         finalRows.push(finalRow);
     }
 
-    // Save the final, processed data
     await saveTableData(tableName, finalRows);
     log(`Step 3 Complete: Saved ${finalRows.length} processed rows to table '${tableName}'.`);
 
-    // Return this table's lookup map for any subsequent children
     return lookupMap;
 }
 
@@ -572,22 +551,28 @@ async function selectTable(tableName) {
     }
 }
 
-runAnalysisBtn.addEventListener('click', async () => {
-    apiKey = apiKeyInput.value;
-    if (!apiKey) return alert('Please enter your API key.');
+async function handleRunAnalysis() {
     progressContainer.innerHTML = '';
     updateProgress('AI is analyzing the database to suggest reports...');
-    
     try {
-        const reportSuggestions = await getAiReportSuggestions();
-        renderReportSuggestions(reportSuggestions);
+        const dbSchema = await loadDbSchema();
+        if (!dbSchema) {
+            throw new Error("Database schema not found. Please upload a file first.");
+        }
+        const context = { dbSchema };
+        const response = await agentManager.run('BI Analyst', context);
+        if (response.success) {
+            renderReportSuggestions(response.data);
+        } else {
+            throw new Error(response.error);
+        }
     } catch (error) {
         updateProgress(`Failed to get report suggestions: ${error.message}`, true);
         console.error(error);
     }
-});
+}
 
-exportPdfBtn.addEventListener('click', () => {
+function handleExportPdf() {
     if (!chartInstance) return;
     updateProgress('Exporting to PDF...');
     const doc = new jsPDF();
@@ -603,48 +588,6 @@ exportPdfBtn.addEventListener('click', () => {
     doc.addImage(imgData, 'JPEG', 14, 60, pdfWidth, pdfHeight);
     doc.save(`${currentTable}_report.pdf`);
     updateProgress('PDF exported successfully.');
-});
-
-// --- AI AGENTS ---
-
-async function getAiDatabaseSchemaPlan(data) {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const sampleData = JSON.stringify(data.slice(0, 5), null, 2);
-    const headers = Object.keys(data[0]);
-
-    const prompt = `
-You are a world-class Database Architect AI. Your task is to design a complete and normalized relational database schema from a flat list of columns, defining both a technical primary key and a business/natural key for each table.
-
-Input Columns:
-${headers.join(', ')}
-
-Your Task:
-1.  **Analyze Entities & Columns**: Identify distinct logical entities and assign the provided columns to the appropriate table. Table names should be plural and snake_case.
-2.  **Define Two Key Types For Each Table**: This is the most critical step.
-    a. **'natural_key_for_uniqueness'**: Identify the column or a list of columns that uniquely define a *business record*. This is for de-duplication. For a 'users' table, it might be \`["email"]\`. For an 'order_items' table, it's often a composite key like \`["order_id", "product_id"]\`.
-    b. **'primary_key'**: This is the table's main technical key. In most cases, you should generate a new surrogate key for this by default. Name this new column exactly 'generated_id' and set it as the 'primary_key'. This new 'generated_id' column must also be added to the table's "columns" list. The only exception is for pure 'junction' tables (like 'order_items'), where the combined foreign keys can serve as the primary key.
-3.  **Define Foreign Keys (FK)**: Establish relationships between tables using their 'primary_key' (which will usually be a 'generated_id').
-4.  **Strict Naming**: You MUST use the exact column names from the 'Input Columns' list.
-
-Output Format:
-You must respond with ONLY a single, minified JSON object with a single root key "schema".
-For each table, provide an object with **four** keys:
-- "columns": An array of strings for all column names (including 'generated_id' if created).
-- "primary_key": A string indicating the primary technical key (usually 'generated_id').
-- "natural_key_for_uniqueness": An array of strings representing the business key for de-duplication.
-- "foreign_keys": An object defining relationships.
-
-Example with Surrogate & Natural Keys:
-{"schema":{"suppliers":{"columns":["Supplier","City","generated_id"],"primary_key":"generated_id","natural_key_for_uniqueness":["Supplier"],"foreign_keys":{}},"products":{"columns":["Product","Supplier","Price","generated_id"],"primary_key":"generated_id","natural_key_for_uniqueness":["Product"],"foreign_keys":{"Supplier":"suppliers.generated_id"}}}}
-    `;
-
-    const chat = model.startChat();
-    const result = await chat.sendMessage(prompt);
-    const responseText = result.response.text();
-    const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
-    const cleanedText = jsonMatch ? jsonMatch[1] : responseText;
-    return JSON.parse(cleanedText);
 }
 
 function renderReportSuggestions(suggestions) {
@@ -652,78 +595,36 @@ function renderReportSuggestions(suggestions) {
         dataTableInstance.destroy();
         dataTableInstance = null;
     }
-    mainContentArea.innerHTML = '';
-    
-    const titleEl = document.createElement('h3');
-    titleEl.className = 'text-2xl font-bold mb-4';
-    titleEl.textContent = 'AI Report Suggestions';
-    mainContentArea.appendChild(titleEl);
+    mainContentArea.innerHTML = ''; // Clear main content area
+    aiSuggestionsContainer.innerHTML = ''; // Clear previous suggestions
 
-    const suggestionsContainer = document.createElement('div');
-    suggestionsContainer.className = 'flex flex-col space-y-2';
-    
+    const titleEl = document.createElement('h3');
+    titleEl.className = 'text-xl font-semibold mb-3'; // Adjusted class for better hierarchy
+    titleEl.textContent = 'AI Report Suggestions:';
+    aiSuggestionsContainer.appendChild(titleEl);
+
+    const suggestionsGrid = document.createElement('div');
+    suggestionsGrid.className = 'flex flex-wrap gap-3'; // Use flex-wrap for a grid-like layout
+
     suggestions.forEach(suggestion => {
         const button = document.createElement('button');
-        button.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-left';
+        button.className = 'ai-suggestion-card'; // Use the new class
         button.textContent = suggestion.title;
         button.onclick = () => runReportExecution(suggestion);
-        suggestionsContainer.appendChild(button);
+        suggestionsGrid.appendChild(button);
     });
 
-    mainContentArea.appendChild(suggestionsContainer);
+    aiSuggestionsContainer.appendChild(suggestionsGrid);
     updateProgress('Please select a report to generate.');
-}
-
-async function getAiReportSuggestions() {
-    const dbSchema = await loadDbSchema();
-    if (!dbSchema) throw new Error("Database schema not found. Please upload a file first.");
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-    const prompt = `
-        You are a Business Intelligence Analyst AI. Your task is to propose a list of insightful reports based on the available database schema.
-
-        **Database Schema:**
-        ${JSON.stringify(dbSchema, null, 2)}
-
-        **Your Task:**
-        1. Analyze the schema to understand the relationships between tables.
-        2. Brainstorm a list of 3 to 5 meaningful business reports that can be generated from this data.
-        3. For each report, provide a clear title and a concise description.
-        4. Crucially, for each report, specify the 'Chart.js' configuration and a 'query' object.
-        5. The 'query' object must detail the tables and columns for the initial data join.
-        6. **Aggregation**: If a report requires data aggregation (e.g., SUM, COUNT, AVG), you MUST include an 'aggregation' object within the 'query' object. This object must contain:
-            - "groupBy": The column to group the data by (e.g., "Product").
-            - "column": The column to be aggregated (e.g., "Quantity").
-            - "method": The aggregation method (e.g., "SUM", "COUNT").
-            - "newColumnName": The name for the new, calculated column (e.g., "Total Quantity Purchased").
-        7. The 'join' object within the query must specify the exact parent and child keys for joining tables.
-
-        **Output Format:**
-        You must respond with ONLY a single, minified JSON object containing a list of report suggestions.
-
-        **Example Response:**
-        [{"title":"Total Quantity Purchased per Product","description":"Calculates the sum of quantities for each product.","query":{"tables":["products","order_items"],"columns":{"products":["ProductName"],"order_items":["Quantity"]},"join":{"child_table":"order_items","child_key":"product_id","parent_table":"products","parent_key":"generated_id"},"aggregation":{"groupBy":"ProductName","column":"Quantity","method":"SUM","newColumnName":"Total Quantity Purchased"}},"chart_config":{"type":"bar","data":{"labels":[],"datasets":[{"label":"Total Quantity","data":[]}]}}}]
-    `;
-
-    const chat = model.startChat();
-    const result = await chat.sendMessage(prompt);
-    const responseText = result.response.text();
-    const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
-    const cleanedText = jsonMatch ? jsonMatch[1] : responseText;
-    return JSON.parse(cleanedText);
 }
 
 async function runReportExecution(suggestion) {
     updateProgress(`Generating report: "${suggestion.title}"...`);
+    log('Executing report suggestion:', suggestion);
     try {
-        // This is a simplified client-side join. A real-world app would do this server-side.
-        // This is a simplified client-side join. A real-world app would do this server-side.
         const { tables, join } = suggestion.query;
         let joinedData = [];
 
-        // Load data for all required tables
         const tableData = {};
         for (const tableName of tables) {
             tableData[tableName] = await loadDataFromTable(tableName);
@@ -732,17 +633,11 @@ async function runReportExecution(suggestion) {
         if (tables.length === 1) {
             joinedData = tableData[tables[0]];
         } else if (tables.length > 1 && join) {
-            // Refactored join logic to use the new structured join object
             const parentTable = tableData[join.parent_table];
             const childTable = tableData[join.child_table];
-            
-            // Create a lookup map from the parent table using its primary key
             const parentMap = new Map(parentTable.map(item => [item[join.parent_key], item]));
-
-            // Join child to parent
             joinedData = childTable.map(childItem => {
                 const parentItem = parentMap.get(childItem[join.child_key]);
-                // Combine the child item with the found parent item
                 return { ...childItem, ...parentItem };
             });
         }
@@ -756,22 +651,15 @@ async function runReportExecution(suggestion) {
             const { groupBy, column, method, newColumnName } = aggregation;
             const groups = {};
 
-            // This new logic initializes the aggregated value when the group is first seen,
-            // preventing non-uniform objects by ensuring every group object has the same structure.
             joinedData.forEach(row => {
                 const groupValue = row[groupBy];
-
                 if (!groups[groupValue]) {
-                    // Initialize the group object with a default value for the new column.
                     groups[groupValue] = {
                         [groupBy]: groupValue,
                         [newColumnName]: 0,
-                        // Add temporary properties for AVG calculation.
                         ...((method.toUpperCase() === 'AVG') && { _sum: 0, _count: 0 })
                     };
                 }
-
-                // Incrementally update the aggregation.
                 const value = parseFloat(row[column]);
                 switch (method.toUpperCase()) {
                     case 'SUM':
@@ -789,10 +677,8 @@ async function runReportExecution(suggestion) {
                 }
             });
 
-            // Convert the groups object into an array of results.
             aggregatedData = Object.values(groups);
 
-            // Finalize AVG calculation.
             if (method.toUpperCase() === 'AVG') {
                 aggregatedData.forEach(group => {
                     group[newColumnName] = group._count > 0 ? group._sum / group._count : 0;
@@ -804,32 +690,30 @@ async function runReportExecution(suggestion) {
             log('Aggregation complete. Initial aggregated data:', finalData);
         }
 
-        // Definitive sanitization step to ensure uniform object structures.
-        let finalUniformData = finalData;
+        const { columns } = suggestion.query;
+        let expectedHeaders = [];
         if (aggregation) {
-            const { groupBy, newColumnName } = aggregation;
-            const expectedHeaders = [groupBy, newColumnName];
-
-            finalUniformData = finalData.map(row => {
-                const uniformRow = {};
-                for (const header of expectedHeaders) {
-                    uniformRow[header] = row[header] ?? 0;
-                }
-                return uniformRow;
-            });
-            log('Sanitization complete. Final uniform data:', finalUniformData);
+            expectedHeaders = [aggregation.groupBy, aggregation.newColumnName];
+        } else {
+            expectedHeaders = Object.values(columns).flat();
         }
+ 
+        const finalUniformData = finalData.map(row => {
+            const uniformRow = {};
+            for (const header of expectedHeaders) {
+                uniformRow[header] = row.hasOwnProperty(header) ? row[header] : null;
+            }
+            return uniformRow;
+        });
+        log('Sanitization complete. Final uniform data:', finalUniformData);
 
-
-        // Always prepare a dynamic chart configuration
         const chartConfig = {
-            type: suggestion.chart_config.type || 'bar', // Default to bar chart
+            type: suggestion.chart_config.type || 'bar',
             data: {
                 labels: [],
                 datasets: [{
                     label: '',
                     data: [],
-                    // You can add more styling here if needed from the suggestion
                     backgroundColor: 'rgba(54, 162, 235, 0.6)',
                     borderColor: 'rgba(54, 162, 235, 1)',
                     borderWidth: 1
@@ -855,16 +739,19 @@ async function runReportExecution(suggestion) {
         
         updateProgress('Data processed. Generating final summary and chart...');
         
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        const chat = model.startChat();
+        const context = { title: suggestion.title, description: suggestion.description };
+        const response = await agentManager.run('Summarizer', context);
         
-        const summaryPrompt = `The user generated a report titled "${suggestion.title}". Based on this title and the report's description ("${suggestion.description}"), write a brief, one-paragraph summary of the likely key insight. This is a placeholder for a more complex data analysis step.`;
-        const result = await chat.sendMessage(summaryPrompt);
-        const summary = result.response.text();
-
+        let summary = "Could not generate summary.";
+        if (response.success) {
+            summary = response.data;
+        } else {
+            log('Failed to get summary from AI.', response.error);
+        }
+ 
+        log('Final data structure being sent to renderReport:', finalUniformData);
         renderReport(suggestion.title, summary, chartConfig, finalUniformData);
-
+ 
     } catch (error) {
         updateProgress(`Report generation failed: ${error.message}`, true);
         console.error(error);

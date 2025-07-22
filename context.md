@@ -1,61 +1,54 @@
-# Multi-Agent Data Engineering Pipeline
+# Multi-Agent Data Engineering & Reporting Platform
 
 ---
 
 ## 1. Project Overview
 
-This project has evolved from a simple data import tool into a sophisticated, multi-agent data engineering pipeline. It leverages AI to intelligently design and populate a relational database in the browser, solving complex data challenges like record de-duplication and maintaining relational integrity across tables.
+This project is a sophisticated, single-page web application that functions as an end-to-end data engineering and business intelligence platform. It leverages a suite of AI agents to intelligently analyze raw CSV data, design and populate a relational database within the browser, and generate dynamic, interactive reports. The system is architected to solve complex data challenges, including record de-duplication and maintaining relational integrity, providing a seamless workflow from raw data to actionable insights.
 
-The core of the system is an AI-driven pipeline that analyzes raw data, designs a normalized database schema, and orchestrates a multi-step ETL (Extract, Transform, Load) process to ensure data is clean, consistent, and correctly linked.
+The user experience is centered around a polished interface featuring a slide-in panel for configuration, a real-time execution log for transparency, and a two-column layout for managing data and viewing reports.
 
 ---
 
 ## 2. Core Architectural Concepts
 
-### Dual-Key AI Schema
+### 2.1. Formal Agent System
+
+All AI-driven logic is encapsulated within a formal, modular agent system managed by the `AgentManager`. This design promotes separation of concerns and allows for the easy extension of AI capabilities. The primary agents include:
+
+-   **Database Architect**: Analyzes raw data headers and content to design a normalized, dual-key database schema.
+-   **BI Analyst**: Examines the database schema to suggest relevant, high-level business reports.
+-   **Summarizer**: Generates concise, natural-language summaries for the generated reports.
+
+### 2.2. Dual-Key Database Schema
 
 To ensure data stability and prevent duplication, the "Database Architect" AI defines a schema with two distinct keys for each table:
 
--   **`primary_key`**: A technical, auto-generated surrogate key (e.g., `generated_id`). Its sole purpose is to provide a stable, unique identifier for establishing reliable foreign key relationships between tables.
-
+-   **`primary_key`**: A technical, auto-generated surrogate key (e.g., `generated_id`). Its sole purpose is to provide a stable, unique identifier for establishing reliable foreign key relationships.
 -   **`natural_key_for_uniqueness`**: A business-oriented key composed of one or more columns that uniquely identify a record in the real world. This key is used for de-duplicating data during the import process.
-    -   *Example for a `suppliers` table*: `["Supplier"]`
-    -   *Example for an `orders` table*: `["Order Date", "supplier_id"]`
 
-This dual-key strategy allows the system to maintain stable internal links (`primary_key`) while intelligently handling duplicate records based on business rules (`natural_key_for_uniqueness`).
+This dual-key strategy allows the system to maintain stable internal links while intelligently handling duplicate records based on business rules.
 
-### Multi-Agent ETL Pipeline
+### 2.3. Multi-Agent ETL Pipeline
 
-The data import process is managed by the `runDataProcessingPipeline` orchestrator, which executes a sequence of specialized AI agents to ensure data is processed in the correct order and all relationships are preserved.
+The data import process is managed by the `runDataProcessingPipeline` orchestrator, a multi-step ETL process that ensures data is processed in the correct order and all relationships are preserved.
 
-The pipeline operates as follows:
-
-#### a. Dependency Analysis
-
--   **Function**: `determineExecutionOrder()`
--   **Description**: Before any data is processed, this function analyzes the AI-generated schema to identify dependencies between tables. It creates an execution plan that ensures parent tables (those with no foreign key dependencies) are processed before their corresponding child tables.
-
-#### b. Parent Table Processing
-
--   **Agent**: `processParentTable`
--   **Description**: This agent is responsible for processing tables that have no dependencies. For each parent table, it:
-    1.  Imports the raw data.
-    2.  De-duplicates records based on the `natural_key_for_uniqueness`.
-    3.  Generates a unique `primary_key` for each new record.
-    4.  Creates a **lookup map**, which is its most critical output. This map links the natural key of each record to its newly generated primary key (e.g., `{"Global Supplies": "supp_123"}`).
-
-#### c. Child Table Processing
-
--   **Agent**: `processChildTable`
--   **Description**: This agent handles tables that depend on one or more parent tables. It uses the lookup maps generated by the parent processors to correctly populate foreign keys.
--   **Refined Logic**: To guarantee data integrity, the agent follows a precise sequence:
-    1.  For each incoming child record, it uses the **lookup maps** to find the correct `primary_key` of its parent(s) and populates the foreign key columns.
-    2.  **Only after** the foreign keys are correctly filled does it proceed with de-duplication based on its own `natural_key_for_uniqueness`.
-
-This "populate-then-deduplicate" strategy was a key refinement that solved the previous issues of `null` foreign keys and broken data relationships, ensuring the final database is fully relational and reliable.
+1.  **Dependency Analysis (`determineExecutionOrder`)**: The pipeline begins by analyzing the AI-generated schema to identify dependencies. It creates an execution plan that processes parent tables (those with no foreign keys) before their corresponding child tables.
+2.  **Parent Table Processing (`processParentTable`)**: This agent processes tables with no dependencies. It de-duplicates records using the `natural_key_for_uniqueness` and generates a `primary_key` for each new record. Its most critical output is a **lookup map** that links the natural key of each record to its new primary key (e.g., `{"Global Supplies": "supp_123"}`).
+3.  **Child Table Processing (`processChildTable`)**: This agent handles dependent tables. It uses the lookup maps from parent processors to populate foreign key columns. The logic follows a "populate-then-deduplicate" strategy: it first populates the foreign keys using the lookup maps and *then* de-duplicates the child records based on their own natural key. This solved critical data integrity issues.
 
 ---
 
-## 3. System Summary
+## 3. Key Features & UI/UX
 
-The new architecture transforms the application into a robust data engineering tool. By combining an intelligent dual-key schema with a dependency-aware, multi-agent pipeline, it automates the creation of clean, normalized, and relationally-sound databases directly from raw data files. This provides a solid foundation for reliable and accurate downstream analysis.
+-   **Vite & Tailwind CSS**: The application is built with a modern frontend stack, ensuring a fast development experience and a clean, responsive design.
+-   **Client-Side Database**: All data is stored and managed locally in the user's browser using **IndexedDB**, providing a secure and private environment.
+-   **Dynamic Reporting**: The "BI Analyst" agent suggests reports, which are then rendered with interactive charts (using Chart.js) and sortable data tables (using DataTables.js). Reports can be exported as PDFs.
+-   **Robust Initialization**: The application's entry point (`src/main.js`) uses a strict `DOMContentLoaded` listener to prevent race condition errors, ensuring all DOM elements are available before any script attempts to access them.
+-   **Slide-In Settings Panel**: A smoothly animated panel provides a polished user experience for managing the application's configuration, such as the AI API key.
+
+---
+
+## 4. Final Status
+
+The application is stable, feature-complete, and free of known bugs. All core architectural challenges, including data integrity and application startup errors, have been resolved. The final product is a robust and user-friendly data analysis tool.
