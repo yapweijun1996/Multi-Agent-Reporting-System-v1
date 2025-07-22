@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "chart.js": "^4.4.3",
+    "datatables.net-dt": "^2.3.2",
+    "jquery": "^3.7.1",
     "jspdf": "^2.5.1",
     "papaparse": "^5.4.1"
   }

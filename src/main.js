@@ -1,12 +1,15 @@
 import { Chart, registerables } from 'chart.js';
 import jsPDF from 'jspdf';
+import $ from 'jquery';
+import DataTable from 'datatables.net-dt';
 import {
     saveApiKey,
     loadApiKey,
     listTables,
     saveNewCsvAsTable,
     loadDataFromTable,
-    deleteTable
+    deleteTable,
+    getTableSchemas
 } from './db.js';
 
 Chart.register(...registerables);
@@ -16,6 +19,7 @@ let apiKey = '';
 let chartInstance = null;
 let currentTable = null;
 let currentData = [];
+let dataTableInstance = null;
 
 // --- DOM ELEMENTS ---
 const apiKeyInput = document.getElementById('apiKey');
@@ -28,7 +32,7 @@ const exportPdfBtn = document.getElementById('exportPdfBtn');
 const progressContainer = document.getElementById('progress-container');
 const mainContentArea = document.getElementById('main-content-area');
 
-// --- SIMPLIFIED AI SDK (from previous implementation) ---
+// --- SIMPLIFIED AI SDK ---
 const { GoogleGenerativeAI } = {
     GoogleGenerativeAI: class {
         constructor(apiKey) { this.apiKey = apiKey; }
@@ -64,7 +68,6 @@ class ChatSession {
 
 // --- INITIALIZATION ---
 window.addEventListener('load', async () => {
-    // Load API Key
     try {
         const savedKey = await loadApiKey();
         if (savedKey) {
@@ -74,11 +77,10 @@ window.addEventListener('load', async () => {
     } catch (error) {
         console.error('Failed to load API key:', error);
     }
-    // Render initial table list
     await renderTableList();
 });
 
-// --- UI RENDERING FUNCTIONS ---
+// --- UI RENDERING ---
 
 async function renderTableList() {
     const tables = await listTables();
@@ -100,14 +102,11 @@ async function renderTableList() {
         deleteBtn.textContent = '✖';
         deleteBtn.className = 'text-red-500 hover:text-red-700 font-bold';
         deleteBtn.onclick = async (e) => {
-            e.stopPropagation(); // Prevent li click event
+            e.stopPropagation();
             if (confirm(`Are you sure you want to delete the table "${tableName}"?`)) {
                 await deleteTable(tableName);
                 await renderTableList();
-                // If the deleted table was the current one, reset the view
-                if (currentTable === tableName) {
-                    resetViewer();
-                }
+                if (currentTable === tableName) resetViewer();
             }
         };
         li.appendChild(deleteBtn);
@@ -118,46 +117,34 @@ async function renderTableList() {
 }
 
 function renderDataTable(data) {
-    mainContentArea.innerHTML = '';
+    if (dataTableInstance) {
+        dataTableInstance.destroy();
+    }
+    mainContentArea.innerHTML = '<table id="dataTable" class="display" width="100%"></table>';
+
     if (!data || data.length === 0) return;
 
-    const container = document.createElement('div');
-    container.className = 'overflow-x-auto';
-    
-    const table = document.createElement('table');
-    table.className = 'min-w-full divide-y divide-gray-200';
-
-    const thead = document.createElement('thead');
-    thead.className = 'bg-gray-50';
-    const headerRow = document.createElement('tr');
     const headers = Object.keys(data[0]).filter(h => h !== 'tableName');
-    headers.forEach(headerText => {
-        const th = document.createElement('th');
-        th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
-        th.textContent = headerText;
-        headerRow.appendChild(th);
-    });
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
+    const columns = headers.map(header => ({
+        title: header,
+        data: header
+    }));
 
-    const tbody = document.createElement('tbody');
-    tbody.className = 'bg-white divide-y divide-gray-200';
-    data.forEach(rowData => {
-        const row = document.createElement('tr');
-        headers.forEach(header => {
-            const td = document.createElement('td');
-            td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
-            td.textContent = rowData[header];
-            row.appendChild(td);
-        });
-        tbody.appendChild(row);
+    dataTableInstance = new DataTable('#dataTable', {
+        data: data,
+        columns: columns,
+        responsive: true,
+        paging: true,
+        searching: true,
+        info: true,
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
-    mainContentArea.appendChild(container);
 }
 
 function renderReport(title, summary, chartConfig) {
+    if (dataTableInstance) {
+        dataTableInstance.destroy();
+        dataTableInstance = null;
+    }
     mainContentArea.innerHTML = '';
     if (chartInstance) chartInstance.destroy();
 
@@ -188,6 +175,10 @@ function resetViewer() {
     currentData = [];
     viewerTitle.textContent = 'Select a Table';
     viewerActions.classList.add('hidden');
+    if (dataTableInstance) {
+        dataTableInstance.destroy();
+        dataTableInstance = null;
+    }
     mainContentArea.innerHTML = '<p class="text-gray-500">Select a table from the list to view its data or run an analysis.</p>';
 }
 
@@ -199,47 +190,137 @@ function updateProgress(message, isError = false) {
     progressContainer.scrollTop = progressContainer.scrollHeight;
 }
 
-// --- EVENT LISTENERS & WORKFLOW ---
+// --- WORKFLOWS ---
 
 apiKeyInput.addEventListener('change', () => saveApiKey(apiKeyInput.value));
 
-csvFileInput.addEventListener('change', (event) => {
+csvFileInput.addEventListener('change', async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    const tableName = prompt('Enter a name for this data table:', file.name.replace(/\.csv$/, ''));
-    if (!tableName) {
+    apiKey = apiKeyInput.value;
+    if (!apiKey) {
+        alert('Please enter your API key first.');
         csvFileInput.value = '';
         return;
     }
 
+    progressContainer.innerHTML = '';
+    updateProgress('AI is analyzing the new file...');
+
+    const previewWorker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+    let filePreview = [];
+    previewWorker.postMessage({ file, preview: true });
+
+    previewWorker.onmessage = async (e) => {
+        const { type, payload } = e.data;
+        if (type === 'data') {
+            filePreview.push(...payload);
+        } else if (type === 'complete') {
+            previewWorker.terminate();
+            try {
+                const schemaPlan = await getAiDatabaseSchemaPlan(filePreview);
+                let planSummary = "AI Database Architect Plan:\n";
+                Object.entries(schemaPlan).forEach(([tableName, columns]) => {
+                    planSummary += `- Create table '${tableName}' with columns: ${columns.join(', ')}\n`;
+                });
+
+                updateProgress(planSummary);
+                processFileWithSchemaPlan(file, schemaPlan);
+
+            } catch (error) {
+                updateProgress(`AI Architect failed: ${error.message}`, true);
+                console.error(error);
+                const tableName = prompt('AI Architect failed. Please enter a single table name for this file:', file.name.replace(/\.csv$/, ''));
+                if (tableName) processFullFile(file, tableName);
+            }
+        } else if (type === 'error') {
+            alert(`Error parsing file preview: ${e.data.payload.message}`);
+            previewWorker.terminate();
+        }
+    };
+});
+
+function processFileWithSchemaPlan(file, schemaPlan) {
+    updateProgress(`Executing AI's database plan...`);
     const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-    let tempData = [];
-    worker.postMessage(file);
+    let fullData = [];
+    worker.postMessage({ file });
 
     worker.onmessage = async (e) => {
         const { type, payload } = e.data;
         if (type === 'data') {
-            tempData.push(...payload);
+            fullData.push(...payload);
         } else if (type === 'complete') {
-            await saveNewCsvAsTable(tableName, tempData);
+            worker.terminate();
+            for (const [tableName, columns] of Object.entries(schemaPlan)) {
+                const uniqueRows = new Map();
+                const primaryKey = columns[0];
+
+                fullData.forEach(fullRow => {
+                    // Only proceed if the row from the source CSV contains the primary key for the new table.
+                    if (fullRow.hasOwnProperty(primaryKey) && fullRow[primaryKey]) {
+                        const newRow = {};
+                        columns.forEach(col => {
+                            newRow[col] = fullRow.hasOwnProperty(col) ? fullRow[col] : null;
+                        });
+
+                        const pkValue = newRow[primaryKey];
+                        if (!uniqueRows.has(pkValue)) {
+                            uniqueRows.set(pkValue, newRow);
+                        }
+                    }
+                });
+
+                const tableData = Array.from(uniqueRows.values());
+                if (tableData.length > 0) {
+                    await saveNewCsvAsTable(tableName, tableData);
+                }
+                updateProgress(`Successfully created and populated table: "${tableName}"`);
+            }
             await renderTableList();
-            selectTable(tableName); // Auto-select the new table
-            csvFileInput.value = ''; // Reset file input
+            const firstTable = Object.keys(schemaPlan)[0];
+            if (firstTable) {
+                selectTable(firstTable);
+            }
+            csvFileInput.value = '';
         } else if (type === 'error') {
-            alert(`Error parsing file: ${payload.message}`);
+            alert(`Error parsing file: ${e.data.payload.message}`);
+            worker.terminate();
         }
     };
-});
+}
+
+function processFullFile(file, tableName) {
+    updateProgress(`Processing full file for table "${tableName}"...`);
+    const mainWorker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+    let fullData = [];
+    mainWorker.postMessage({ file });
+
+    mainWorker.onmessage = async (e) => {
+        const { type, payload } = e.data;
+        if (type === 'data') {
+            fullData.push(...payload);
+        } else if (type === 'complete') {
+            await saveNewCsvAsTable(tableName, fullData);
+            await renderTableList();
+            selectTable(tableName);
+            csvFileInput.value = '';
+            mainWorker.terminate();
+            updateProgress(`Table "${tableName}" updated/created successfully.`);
+        } else if (type === 'error') {
+            alert(`Error parsing full file: ${e.data.payload.message}`);
+            mainWorker.terminate();
+        }
+    };
+}
 
 async function selectTable(tableName) {
     currentTable = tableName;
     viewerTitle.textContent = `Viewing: ${tableName}`;
     viewerActions.classList.remove('hidden');
-    
     progressContainer.innerHTML = '';
     updateProgress(`Loading data for "${tableName}"...`);
-    
     try {
         currentData = await loadDataFromTable(tableName);
         renderDataTable(currentData);
@@ -250,45 +331,64 @@ async function selectTable(tableName) {
 }
 
 runAnalysisBtn.addEventListener('click', () => {
-    if (!currentData || currentData.length === 0) {
-        alert('No data selected to analyze.');
-        return;
-    }
+    if (!currentData || currentData.length === 0) return alert('No data selected to analyze.');
     apiKey = apiKeyInput.value;
-    if (!apiKey) {
-        alert('Please enter your API key.');
-        return;
-    }
+    if (!apiKey) return alert('Please enter your API key.');
     progressContainer.innerHTML = '';
     runAnalysisPipeline(currentData);
 });
 
 exportPdfBtn.addEventListener('click', () => {
     if (!chartInstance) return;
-
     updateProgress('Exporting to PDF...');
     const doc = new jsPDF();
-    const title = document.getElementById('reportTitle').textContent;
-    const summary = document.getElementById('reportSummary').textContent;
-    
     doc.setFontSize(18);
-    doc.text(title, 14, 22);
+    doc.text(document.getElementById('reportTitle').textContent, 14, 22);
     doc.setFontSize(11);
-    const splitSummary = doc.splitTextToSize(summary, 180);
-    doc.text(splitSummary, 14, 32);
-
+    doc.text(doc.splitTextToSize(document.getElementById('reportSummary').textContent, 180), 14, 32);
     const canvas = chartInstance.canvas;
     const imgData = canvas.toDataURL('image/jpeg', 0.8);
     const imgProps = doc.getImageProperties(imgData);
     const pdfWidth = doc.internal.pageSize.getWidth() - 28;
     const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
     doc.addImage(imgData, 'JPEG', 14, 60, pdfWidth, pdfHeight);
-
     doc.save(`${currentTable}_report.pdf`);
     updateProgress('PDF exported successfully.');
 });
 
-// --- AI ANALYSIS PIPELINE ---
+// --- AI AGENTS ---
+
+async function getAiDatabaseSchemaPlan(data) {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const sampleData = JSON.stringify(data.slice(0, 5), null, 2);
+    const headers = Object.keys(data[0]);
+
+    const prompt = `
+        You are a Database Architect AI. Your task is to analyze the columns of a new dataset and design a relational database schema by splitting the columns into logical tables.
+
+        Here are the columns from the new dataset:
+        ${headers.join(', ')}
+
+        Analyze these columns and group them into distinct logical entities. For example, columns like 'customer_id', 'customer_name', 'email' belong in a 'customers' table, while 'order_id', 'product_id', 'quantity' belong in an 'orders' table.
+
+        Propose a schema by responding with ONLY a JSON object in the following format. Each key is the proposed new table name, and the value is an array of column names from the original dataset that should belong to that table.
+
+        Example Response:
+        {
+            "customers": ["customer_id", "customer_name", "email"],
+            "orders": ["order_id", "order_date", "customer_id", "total_amount"],
+            "products": ["product_id", "product_name", "price"]
+        }
+    `;
+
+    const chat = model.startChat();
+    const result = await chat.sendMessage(prompt);
+    const responseText = result.response.text();
+    const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+    const cleanedText = jsonMatch ? jsonMatch[1] : responseText;
+    return JSON.parse(cleanedText);
+}
 
 async function runAnalysisPipeline(data) {
     updateProgress('Starting AI analysis...');
