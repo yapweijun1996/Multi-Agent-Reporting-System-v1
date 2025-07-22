@@ -34,6 +34,31 @@ const runAnalysisBtn = document.getElementById('runAnalysisBtn');
 const exportPdfBtn = document.getElementById('exportPdfBtn');
 const progressContainer = document.getElementById('progress-container');
 const mainContentArea = document.getElementById('main-content-area');
+const debugLogContainer = document.getElementById('debug-log-container');
+
+// --- LOGGING ---
+function log(message, data = null) {
+    const p = document.createElement('p');
+    const timestamp = new Date().toLocaleTimeString();
+    p.innerHTML = `<span class="text-gray-500">${timestamp}:</span> ${message}`;
+    
+    if (data) {
+        const pre = document.createElement('pre');
+        pre.className = 'bg-gray-800 p-2 rounded mt-1 text-sm';
+        pre.textContent = JSON.stringify(data, null, 2);
+        p.appendChild(pre);
+    }
+    
+    // Clear initial message if it exists
+    const initialMessage = debugLogContainer.querySelector('.text-gray-400');
+    if (initialMessage) {
+        debugLogContainer.innerHTML = '';
+    }
+
+    debugLogContainer.appendChild(p);
+    debugLogContainer.scrollTop = debugLogContainer.scrollHeight;
+}
+
 
 // --- SIMPLIFIED AI SDK ---
 const { GoogleGenerativeAI } = {
@@ -143,7 +168,7 @@ function renderDataTable(data) {
     });
 }
 
-function renderReport(title, summary, chartConfig) {
+function renderReport(title, summary, chartConfig, data) {
     if (dataTableInstance) {
         dataTableInstance.destroy();
         dataTableInstance = null;
@@ -154,7 +179,7 @@ function renderReport(title, summary, chartConfig) {
     const titleEl = document.createElement('h3');
     titleEl.className = 'text-2xl font-bold mb-2';
     titleEl.id = 'reportTitle';
-    titleEl.textContent = `Analysis of: ${title}`;
+    titleEl.textContent = title;
     mainContentArea.appendChild(titleEl);
 
     const summaryEl = document.createElement('p');
@@ -164,12 +189,20 @@ function renderReport(title, summary, chartConfig) {
     mainContentArea.appendChild(summaryEl);
 
     const chartContainer = document.createElement('div');
-    chartContainer.className = 'w-full h-96 mx-auto';
+    chartContainer.className = 'w-full h-96 mx-auto mb-8';
     const canvas = document.createElement('canvas');
     chartContainer.appendChild(canvas);
     mainContentArea.appendChild(chartContainer);
 
     chartInstance = new Chart(canvas, chartConfig);
+
+    // Render the data table with the final (potentially aggregated) data
+    const tableContainer = document.createElement('div');
+    tableContainer.id = 'report-table-container';
+    mainContentArea.appendChild(tableContainer);
+    renderDataTable(data);
+
+
     updateProgress('Report generated successfully!');
 }
 
@@ -209,7 +242,8 @@ csvFileInput.addEventListener('change', async (event) => {
     }
 
     progressContainer.innerHTML = '';
-    updateProgress('AI is analyzing the new file...');
+    debugLogContainer.innerHTML = '<p class="text-gray-400">Log will appear here...</p>'; // Reset log
+    log('New file detected. Starting analysis...');
 
     const previewWorker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
     let filePreview = [];
@@ -222,89 +256,280 @@ csvFileInput.addEventListener('change', async (event) => {
         } else if (type === 'complete') {
             previewWorker.terminate();
             try {
+                updateProgress('AI analysis complete. Generating database schema...');
                 const schemaPlan = await getAiDatabaseSchemaPlan(filePreview);
+                log("Received schema plan from AI Architect:", schemaPlan);
+                
+                // The schema is nested inside the response
                 const dbSchema = schemaPlan.schema;
+                
+                // Update user-facing progress
                 let planSummary = "AI Database Architect Plan:\n";
-                Object.entries(dbSchema).forEach(([tableName, tableDetails]) => {
-                    planSummary += `- Table: '${tableName}' (PK: ${tableDetails.primary_key})\n`;
-                    planSummary += `  Columns: ${tableDetails.columns.join(', ')}\n`;
-                    if (Object.keys(tableDetails.foreign_keys).length > 0) {
-                        planSummary += `  Relationships: ${JSON.stringify(tableDetails.foreign_keys)}\n`;
-                    }
-                });
-
+                if (dbSchema) {
+                    Object.entries(dbSchema).forEach(([tableName, tableDetails]) => {
+                        planSummary += `- Table: '${tableName}' (PK: ${tableDetails.primary_key}, Natural Key: [${tableDetails.natural_key_for_uniqueness.join(', ')}])\n`;
+                    });
+                }
                 updateProgress(planSummary);
-                processFileWithSchemaPlan(file, dbSchema);
+
+                runDataProcessingPipeline(file, schemaPlan);
 
             } catch (error) {
                 updateProgress(`AI Architect failed: ${error.message}`, true);
-                console.error(error);
+                log(`AI Architect failed: ${error.message}`, error);
                 const tableName = prompt('AI Architect failed. Please enter a single table name for this file:', file.name.replace(/\.csv$/, ''));
                 if (tableName) processFullFile(file, tableName);
             }
         } else if (type === 'error') {
+            log(`Error parsing file preview: ${e.data.payload.message}`, e.data.payload);
             alert(`Error parsing file preview: ${e.data.payload.message}`);
             previewWorker.terminate();
         }
     };
 });
 
-function processFileWithSchemaPlan(file, schemaPlan) {
-    updateProgress(`Executing AI's database plan...`);
-    const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-    let fullData = [];
-    worker.postMessage({ file });
+function determineExecutionOrder(schemaPlan) {
+    const schema = schemaPlan.schema;
+    if (!schema) {
+        log("Could not determine execution order: 'schema' property is missing from the plan.", schemaPlan);
+        return [];
+    }
 
-    worker.onmessage = async (e) => {
-        const { type, payload } = e.data;
-        if (type === 'data') {
-            fullData.push(...payload);
-        } else if (type === 'complete') {
-            worker.terminate();
-            const newTableNames = Object.keys(schemaPlan);
-            for (const tableName of newTableNames) {
-                const tableDetails = schemaPlan[tableName];
-                const { columns, primary_key } = tableDetails;
-                const columnsToProcess = new Set(columns);
-                columnsToProcess.add(primary_key); // Ensure PK is always included
-                const uniqueRows = new Map();
+    const tableNames = Object.keys(schema);
+    const parentTables = [];
+    const childTables = [];
 
-                fullData.forEach(fullRow => {
-                    if (fullRow.hasOwnProperty(primary_key) && fullRow[primary_key]) {
-                        const newRow = {};
-                        columnsToProcess.forEach(col => {
-                            newRow[col] = fullRow.hasOwnProperty(col) ? fullRow[col] : null;
-                        });
-
-                        const pkValue = newRow[primary_key];
-                        if (!uniqueRows.has(pkValue)) {
-                            uniqueRows.set(pkValue, newRow);
-                        }
-                    }
-                });
-
-                const tableData = Array.from(uniqueRows.values());
-                if (tableData.length > 0) {
-                    await saveTableData(tableName, tableData);
-                    updateProgress(`Successfully created and populated table: "${tableName}"`);
-                } else {
-                    updateProgress(`Table "${tableName}" was defined but no unique data was found to populate it.`);
-                }
-            }
-            
-            await updateTableList(newTableNames);
-            await saveDbSchema(schemaPlan);
-            await renderTableList();
-            const firstTable = Object.keys(schemaPlan)[0];
-            if (firstTable) {
-                selectTable(firstTable);
-            }
-            csvFileInput.value = '';
-        } else if (type === 'error') {
-            alert(`Error parsing file: ${e.data.payload.message}`);
-            worker.terminate();
+    for (const tableName of tableNames) {
+        const table = schema[tableName];
+        if (table && table.foreign_keys && Object.keys(table.foreign_keys).length === 0) {
+            parentTables.push(tableName);
+        } else {
+            childTables.push(tableName);
         }
-    };
+    }
+    return [...parentTables, ...childTables];
+}
+
+async function runDataProcessingPipeline(file, schemaPlan) {
+    log('Starting data processing pipeline...');
+    const executionOrder = determineExecutionOrder(schemaPlan);
+    log('Determined table processing order:', executionOrder);
+    updateProgress('Data processing pipeline initiated. Schema has been designed.');
+
+    const dbSchema = schemaPlan.schema;
+    if (!dbSchema || executionOrder.length === 0) {
+        log('Pipeline halting: No schema or execution order found.', { dbSchema, executionOrder });
+        updateProgress('Pipeline failed: No schema or executable order found in the plan.', true);
+        return;
+    }
+
+    // This object will hold all the lookup maps generated by the processors.
+    const lookupMaps = {};
+
+    // 1. Parse the full CSV file once using the worker.
+    updateProgress('Parsing full data file...');
+    log('Parsing full data file via worker...');
+    const fullData = await new Promise((resolve, reject) => {
+        const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+        let data = [];
+        worker.postMessage({ file });
+        worker.onmessage = (e) => {
+            const { type, payload } = e.data;
+            if (type === 'data') {
+                data.push(...payload);
+            } else if (type === 'complete') {
+                log(`Successfully parsed ${data.length} rows from the file.`);
+                updateProgress(`Successfully parsed ${data.length} rows.`);
+                worker.terminate();
+                resolve(data);
+            } else if (type === 'error') {
+                log('Error parsing full file in pipeline', payload);
+                updateProgress(`Error parsing file: ${payload.message}`, true);
+                worker.terminate();
+                reject(new Error(payload.message));
+            }
+        };
+    });
+
+    if (!fullData || fullData.length === 0) {
+        log('Pipeline halting: No data parsed from the file.');
+        updateProgress('Pipeline failed: Could not parse any data from the file.', true);
+        return;
+    }
+
+    // 2. Loop through the execution order and process each table.
+    for (const tableName of executionOrder) {
+        const tableDetails = dbSchema[tableName];
+        if (!tableDetails) {
+            log(`Skipping table '${tableName}' as its details were not found in the schema.`);
+            continue;
+        }
+
+        updateProgress(`Processing table: ${tableName}...`);
+        let returnedMap;
+
+        try {
+            // Conditionally call the correct processor.
+            if (Object.keys(tableDetails.foreign_keys).length === 0) {
+                // This is a parent table.
+                returnedMap = await processParentTable(tableName, tableDetails, fullData);
+            } else {
+                // This is a child table; it needs the lookup maps from its parents.
+                returnedMap = await processChildTable(tableName, tableDetails, fullData, lookupMaps, dbSchema);
+            }
+            // Store the returned map for subsequent child tables.
+            lookupMaps[tableName] = returnedMap;
+            updateProgress(`Successfully processed and saved data for ${tableName}.`);
+        } catch (error) {
+            log(`Error processing table '${tableName}':`, error);
+            updateProgress(`Failed to process table '${tableName}': ${error.message}`, true);
+            // Halt the pipeline on error
+            return;
+        }
+    }
+
+    // 3. Perform final actions after the loop completes.
+    log('All tables processed. Finalizing pipeline.');
+    await saveDbSchema(dbSchema);
+    log('Full database schema saved.');
+
+    await updateTableList(Object.keys(dbSchema));
+    await renderTableList();
+    log('UI table list updated.');
+
+    // Auto-select the last processed table for user convenience.
+    if (executionOrder.length > 0) {
+        selectTable(executionOrder[executionOrder.length - 1]);
+    }
+
+    csvFileInput.value = '';
+    updateProgress('Data processing pipeline completed successfully!');
+}
+
+async function processParentTable(tableName, tableDetails, fullData) {
+    log(`Processing parent table: ${tableName}...`);
+
+    const uniqueRows = new Map();
+    const naturalKeyCols = tableDetails.natural_key_for_uniqueness;
+
+    for (const row of fullData) {
+        const naturalKey = naturalKeyCols.map(keyCol => row[keyCol]).join('|');
+        if (!uniqueRows.has(naturalKey)) {
+            uniqueRows.set(naturalKey, row);
+        }
+    }
+
+    log(`Found ${uniqueRows.size} unique rows for table '${tableName}'.`);
+
+    const lookupMap = {};
+    const finalRows = [];
+    let idCounter = 1;
+
+    for (const [naturalKey, uniqueRow] of uniqueRows.entries()) {
+        const generatedId = `${tableName}_${idCounter++}`;
+        
+        // Add the generated ID to the row data
+        const rowWithId = { ...uniqueRow, generated_id: generatedId };
+        
+        // Build the lookup map
+        lookupMap[naturalKey] = generatedId;
+
+        // Filter the row to only include columns defined in the schema
+        const finalRow = {};
+        for (const col of tableDetails.columns) {
+            if (rowWithId.hasOwnProperty(col)) {
+                finalRow[col] = rowWithId[col];
+            }
+        }
+        finalRows.push(finalRow);
+    }
+    
+    // Log a sample of the lookup map for debugging
+    const lookupSample = Object.fromEntries(Object.entries(lookupMap).slice(0, 5));
+    log(`Generated lookup map for '${tableName}'. Sample:`, lookupSample);
+    
+    // Save the processed data to the database
+    await saveTableData(tableName, finalRows);
+    log(`Saved ${finalRows.length} processed rows to table '${tableName}'.`);
+
+    // The lookup map is returned for use by child-table processing agents
+    return lookupMap;
+}
+
+async function processChildTable(tableName, tableDetails, fullData, lookupMaps, dbSchema) {
+    log(`Processing child table: ${tableName}...`);
+
+    // Step 1: Populate foreign keys on a copy of the full dataset first.
+    // This is critical for de-duplication to work correctly on composite natural keys.
+    const enrichedData = fullData.map(row => {
+        const processedRow = { ...row };
+
+        for (const [fkColumn, parentInfo] of Object.entries(tableDetails.foreign_keys)) {
+            const [parentTableName] = parentInfo.split('.');
+            const parentTableDetails = dbSchema[parentTableName];
+
+            if (!parentTableDetails || !lookupMaps[parentTableName]) {
+                log(`  WARNING: Prerequisite data for FK '${fkColumn}' -> '${parentTableName}' is missing. Skipping.`);
+                continue;
+            }
+
+            const parentNaturalKeyCols = parentTableDetails.natural_key_for_uniqueness;
+            const parentLookupKey = parentNaturalKeyCols.map(keyCol => processedRow[keyCol]).join('|');
+            const parentLookupMap = lookupMaps[parentTableName];
+
+            if (parentLookupMap.hasOwnProperty(parentLookupKey)) {
+                processedRow[fkColumn] = parentLookupMap[parentLookupKey];
+            }
+        }
+        return processedRow;
+    });
+    log(`Step 1 Complete: Populated foreign keys for ${enrichedData.length} rows.`);
+
+
+    // Step 2: Perform de-duplication on the now-enriched data.
+    const uniqueRows = new Map();
+    const naturalKeyCols = tableDetails.natural_key_for_uniqueness;
+
+    for (const row of enrichedData) {
+        const naturalKey = naturalKeyCols.map(keyCol => row[keyCol]).join('|');
+        if (!uniqueRows.has(naturalKey)) {
+            uniqueRows.set(naturalKey, row);
+        }
+    }
+    log(`Step 2 Complete: Found ${uniqueRows.size} unique rows for '${tableName}'.`);
+
+
+    // Step 3: Process the unique rows to generate IDs, create a lookup map, and save.
+    const lookupMap = {};
+    const finalRows = [];
+    let idCounter = 1;
+
+    for (const [naturalKey, uniqueRow] of uniqueRows.entries()) {
+        const processedRow = { ...uniqueRow };
+
+        // Generate ID for this table's record
+        const generatedId = `${tableName}_${idCounter++}`;
+        processedRow.generated_id = generatedId;
+
+        // Create a lookup map for this table, to be used by its own children (if any)
+        lookupMap[naturalKey] = generatedId;
+
+        // Filter down to only the columns specified in the schema
+        const finalRow = {};
+        for (const col of tableDetails.columns) {
+            if (processedRow.hasOwnProperty(col)) {
+                finalRow[col] = processedRow[col];
+            }
+        }
+        finalRows.push(finalRow);
+    }
+
+    // Save the final, processed data
+    await saveTableData(tableName, finalRows);
+    log(`Step 3 Complete: Saved ${finalRows.length} processed rows to table '${tableName}'.`);
+
+    // Return this table's lookup map for any subsequent children
+    return lookupMap;
 }
 
 function processFullFile(file, tableName) {
@@ -389,29 +614,29 @@ async function getAiDatabaseSchemaPlan(data) {
     const headers = Object.keys(data[0]);
 
     const prompt = `
-You are a world-class Database Architect AI. Your task is to design a complete and normalized relational database schema from a flat list of columns.
+You are a world-class Database Architect AI. Your task is to design a complete and normalized relational database schema from a flat list of columns, defining both a technical primary key and a business/natural key for each table.
 
 Input Columns:
 ${headers.join(', ')}
 
 Your Task:
-1. Identify Entities: Analyze the columns to identify distinct logical entities (e.g., customers, orders, products).
-2. Define Tables: Create a table for each entity. Table names should be plural and in snake_case (e.g., 'order_items').
-3. Assign Columns: Assign each relevant input column to its corresponding table.
-4. Define Primary Keys: Identify the most suitable primary key for each table from its columns.
-5. Define Foreign Keys: Establish relationships between tables by identifying foreign keys. A foreign key in one table must be the primary key of another.
-6. **Crucially, you MUST use the exact column names provided in the 'Input Columns' list for all 'columns', 'primary_key', and 'foreign_keys' in your output. Do not change casing or formatting.**
+1.  **Analyze Entities & Columns**: Identify distinct logical entities and assign the provided columns to the appropriate table. Table names should be plural and snake_case.
+2.  **Define Two Key Types For Each Table**: This is the most critical step.
+    a. **'natural_key_for_uniqueness'**: Identify the column or a list of columns that uniquely define a *business record*. This is for de-duplication. For a 'users' table, it might be \`["email"]\`. For an 'order_items' table, it's often a composite key like \`["order_id", "product_id"]\`.
+    b. **'primary_key'**: This is the table's main technical key. In most cases, you should generate a new surrogate key for this by default. Name this new column exactly 'generated_id' and set it as the 'primary_key'. This new 'generated_id' column must also be added to the table's "columns" list. The only exception is for pure 'junction' tables (like 'order_items'), where the combined foreign keys can serve as the primary key.
+3.  **Define Foreign Keys (FK)**: Establish relationships between tables using their 'primary_key' (which will usually be a 'generated_id').
+4.  **Strict Naming**: You MUST use the exact column names from the 'Input Columns' list.
 
 Output Format:
-You must respond with ONLY a single, minified JSON object. The object should have a single root key "schema". The value of "schema" is an object where each key is a table name.
+You must respond with ONLY a single, minified JSON object with a single root key "schema".
+For each table, provide an object with **four** keys:
+- "columns": An array of strings for all column names (including 'generated_id' if created).
+- "primary_key": A string indicating the primary technical key (usually 'generated_id').
+- "natural_key_for_uniqueness": An array of strings representing the business key for de-duplication.
+- "foreign_keys": An object defining relationships.
 
-For each table, provide an object with three keys:
-"columns": An array of strings representing the column names for that table.
-"primary_key": A string indicating the name of the primary key column.
-"foreign_keys": An object where each key is a foreign key column in the current table, and the value is the referenced table and column in the format "referenced_table.referenced_column".
-
-Example Response (using exact headers from a hypothetical input):
-{"schema":{"Customers":{"columns":["CustomerID","CustomerName","Email"],"primary_key":"CustomerID","foreign_keys":{}},"Orders":{"columns":["OrderID","OrderDate","CustomerID","TotalAmount"],"primary_key":"OrderID","foreign_keys":{"CustomerID":"Customers.CustomerID"}}}}
+Example with Surrogate & Natural Keys:
+{"schema":{"suppliers":{"columns":["Supplier","City","generated_id"],"primary_key":"generated_id","natural_key_for_uniqueness":["Supplier"],"foreign_keys":{}},"products":{"columns":["Product","Supplier","Price","generated_id"],"primary_key":"generated_id","natural_key_for_uniqueness":["Product"],"foreign_keys":{"Supplier":"suppliers.generated_id"}}}}
     `;
 
     const chat = model.startChat();
@@ -467,13 +692,19 @@ async function getAiReportSuggestions() {
         2. Brainstorm a list of 3 to 5 meaningful business reports that can be generated from this data.
         3. For each report, provide a clear title and a concise description.
         4. Crucially, for each report, specify the 'Chart.js' configuration and a 'query' object.
-        5. The 'query' object should detail which tables to use and which columns to select. This will be used to fetch and join data client-side.
+        5. The 'query' object must detail the tables and columns for the initial data join.
+        6. **Aggregation**: If a report requires data aggregation (e.g., SUM, COUNT, AVG), you MUST include an 'aggregation' object within the 'query' object. This object must contain:
+            - "groupBy": The column to group the data by (e.g., "Product").
+            - "column": The column to be aggregated (e.g., "Quantity").
+            - "method": The aggregation method (e.g., "SUM", "COUNT").
+            - "newColumnName": The name for the new, calculated column (e.g., "Total Quantity Purchased").
+        7. The 'join' object within the query must specify the exact parent and child keys for joining tables.
 
         **Output Format:**
         You must respond with ONLY a single, minified JSON object containing a list of report suggestions.
 
         **Example Response:**
-        [{"title":"Total Sales per Customer","description":"Displays the total purchase amount for each customer.","query":{"tables":["customers","orders"],"columns":{"customers":["customer_name"],"orders":["total_amount"]},"join_on":"customer_id"},"chart_config":{"type":"bar","data":{"labels":[],"datasets":[{"label":"Total Sales (USD)","data":[]}]},"options":{}}},{"title":"Orders per Month","description":"Shows the number of orders placed each month.","query":{"tables":["orders"],"columns":{"orders":["order_date"]}},"chart_config":{"type":"line","data":{"labels":[],"datasets":[{"label":"Number of Orders","data":[]}]},"options":{}}}]
+        [{"title":"Total Quantity Purchased per Product","description":"Calculates the sum of quantities for each product.","query":{"tables":["products","order_items"],"columns":{"products":["ProductName"],"order_items":["Quantity"]},"join":{"child_table":"order_items","child_key":"product_id","parent_table":"products","parent_key":"generated_id"},"aggregation":{"groupBy":"ProductName","column":"Quantity","method":"SUM","newColumnName":"Total Quantity Purchased"}},"chart_config":{"type":"bar","data":{"labels":[],"datasets":[{"label":"Total Quantity","data":[]}]}}}]
     `;
 
     const chat = model.startChat();
@@ -488,7 +719,8 @@ async function runReportExecution(suggestion) {
     updateProgress(`Generating report: "${suggestion.title}"...`);
     try {
         // This is a simplified client-side join. A real-world app would do this server-side.
-        const { tables, columns, join_on } = suggestion.query;
+        // This is a simplified client-side join. A real-world app would do this server-side.
+        const { tables, join } = suggestion.query;
         let joinedData = [];
 
         // Load data for all required tables
@@ -499,26 +731,96 @@ async function runReportExecution(suggestion) {
 
         if (tables.length === 1) {
             joinedData = tableData[tables[0]];
-        } else if (tables.length > 1 && join_on) {
-            // Simple two-table join based on the first two tables and join_on key
-            const tableA = tableData[tables[0]];
-            const tableB = tableData[tables[1]];
-            const mapB = new Map(tableB.map(item => [item[join_on], item]));
+        } else if (tables.length > 1 && join) {
+            // Refactored join logic to use the new structured join object
+            const parentTable = tableData[join.parent_table];
+            const childTable = tableData[join.child_table];
+            
+            // Create a lookup map from the parent table using its primary key
+            const parentMap = new Map(parentTable.map(item => [item[join.parent_key], item]));
 
-            joinedData = tableA.map(itemA => {
-                const itemB = mapB.get(itemA[join_on]);
-                return { ...itemA, ...itemB };
+            // Join child to parent
+            joinedData = childTable.map(childItem => {
+                const parentItem = parentMap.get(childItem[join.child_key]);
+                // Combine the child item with the found parent item
+                return { ...childItem, ...parentItem };
             });
         }
         
-        // This is a placeholder for a more sophisticated data aggregation step
-        // For now, we assume the AI gives a chart config that can handle the raw joined data.
-        // A real implementation would need an AI agent here to process 'joinedData'
-        // into the final labels and data points for the chart.
+        let finalData = joinedData;
+        const { aggregation } = suggestion.query;
+
+        if (aggregation) {
+            updateProgress('Performing data aggregation...');
+            const { groupBy, column, method, newColumnName } = aggregation;
+            const groups = {};
+
+            joinedData.forEach(row => {
+                const groupValue = row[groupBy];
+                if (!groups[groupValue]) {
+                    groups[groupValue] = [];
+                }
+                groups[groupValue].push(row);
+            });
+
+            const aggregatedData = Object.entries(groups).map(([groupValue, rows]) => {
+                let result;
+                switch (method.toUpperCase()) {
+                    case 'SUM':
+                        result = rows.reduce((acc, row) => acc + (parseFloat(row[column]) || 0), 0);
+                        break;
+                    case 'COUNT':
+                        result = rows.length;
+                        break;
+                    case 'AVG':
+                        result = rows.reduce((acc, row) => acc + (parseFloat(row[column]) || 0), 0) / rows.length;
+                        break;
+                    default:
+                        result = 0;
+                }
+                return {
+                    [groupBy]: groupValue,
+                    [newColumnName]: result
+                };
+            });
+            finalData = aggregatedData;
+            log('Aggregation complete. Final data:', finalData);
+        }
+
+        // Always prepare a dynamic chart configuration
+        const chartConfig = {
+            type: suggestion.chart_config.type || 'bar', // Default to bar chart
+            data: {
+                labels: [],
+                datasets: [{
+                    label: '',
+                    data: [],
+                    // You can add more styling here if needed from the suggestion
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        };
+
+        if (aggregation) {
+            const { groupBy, newColumnName } = aggregation;
+            chartConfig.data.labels = finalData.map(row => row[groupBy]);
+            chartConfig.data.datasets[0].data = finalData.map(row => row[newColumnName]);
+            chartConfig.data.datasets[0].label = newColumnName;
+        }
         
-        updateProgress('Data joined. Generating final summary and chart...');
+        updateProgress('Data processed. Generating final summary and chart...');
         
-        // For now, we pass the raw joined data to a simplified summary agent
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const chat = model.startChat();
@@ -527,10 +829,7 @@ async function runReportExecution(suggestion) {
         const result = await chat.sendMessage(summaryPrompt);
         const summary = result.response.text();
 
-        // NOTE: The chart config from the suggestion is used directly.
-        // This is a major simplification. In a real scenario, the data would need to be
-        // aggregated and mapped to the chart's labels and datasets.
-        renderReport(suggestion.title, summary, suggestion.chart_config);
+        renderReport(suggestion.title, summary, chartConfig, finalData);
 
     } catch (error) {
         updateProgress(`Report generation failed: ${error.message}`, true);
