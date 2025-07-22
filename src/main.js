@@ -756,37 +756,70 @@ async function runReportExecution(suggestion) {
             const { groupBy, column, method, newColumnName } = aggregation;
             const groups = {};
 
+            // This new logic initializes the aggregated value when the group is first seen,
+            // preventing non-uniform objects by ensuring every group object has the same structure.
             joinedData.forEach(row => {
                 const groupValue = row[groupBy];
-                if (!groups[groupValue]) {
-                    groups[groupValue] = [];
-                }
-                groups[groupValue].push(row);
-            });
 
-            aggregatedData = Object.entries(groups).map(([groupValue, rows]) => {
-                let result;
+                if (!groups[groupValue]) {
+                    // Initialize the group object with a default value for the new column.
+                    groups[groupValue] = {
+                        [groupBy]: groupValue,
+                        [newColumnName]: 0,
+                        // Add temporary properties for AVG calculation.
+                        ...((method.toUpperCase() === 'AVG') && { _sum: 0, _count: 0 })
+                    };
+                }
+
+                // Incrementally update the aggregation.
+                const value = parseFloat(row[column]);
                 switch (method.toUpperCase()) {
                     case 'SUM':
-                        result = rows.reduce((acc, row) => acc + (parseFloat(row[column]) || 0), 0);
+                        groups[groupValue][newColumnName] += (value || 0);
                         break;
                     case 'COUNT':
-                        result = rows.length;
+                        groups[groupValue][newColumnName]++;
                         break;
                     case 'AVG':
-                        result = rows.reduce((acc, row) => acc + (parseFloat(row[column]) || 0), 0) / rows.length;
+                        if (!isNaN(value)) {
+                            groups[groupValue]._sum += value;
+                            groups[groupValue]._count++;
+                        }
                         break;
-                    default:
-                        result = 0;
                 }
-                return {
-                    [groupBy]: groupValue,
-                    [newColumnName]: result
-                };
             });
+
+            // Convert the groups object into an array of results.
+            aggregatedData = Object.values(groups);
+
+            // Finalize AVG calculation.
+            if (method.toUpperCase() === 'AVG') {
+                aggregatedData.forEach(group => {
+                    group[newColumnName] = group._count > 0 ? group._sum / group._count : 0;
+                    delete group._sum;
+                    delete group._count;
+                });
+            }
             finalData = aggregatedData;
-            log('Aggregation complete. Final data:', finalData);
+            log('Aggregation complete. Initial aggregated data:', finalData);
         }
+
+        // Definitive sanitization step to ensure uniform object structures.
+        let finalUniformData = finalData;
+        if (aggregation) {
+            const { groupBy, newColumnName } = aggregation;
+            const expectedHeaders = [groupBy, newColumnName];
+
+            finalUniformData = finalData.map(row => {
+                const uniformRow = {};
+                for (const header of expectedHeaders) {
+                    uniformRow[header] = row[header] ?? 0;
+                }
+                return uniformRow;
+            });
+            log('Sanitization complete. Final uniform data:', finalUniformData);
+        }
+
 
         // Always prepare a dynamic chart configuration
         const chartConfig = {
@@ -815,8 +848,8 @@ async function runReportExecution(suggestion) {
 
         if (aggregation) {
             const { groupBy, newColumnName } = aggregation;
-            chartConfig.data.labels = finalData.map(row => row[groupBy]);
-            chartConfig.data.datasets[0].data = finalData.map(row => row[newColumnName]);
+            chartConfig.data.labels = finalUniformData.map(row => row[groupBy]);
+            chartConfig.data.datasets[0].data = finalUniformData.map(row => row[newColumnName]);
             chartConfig.data.datasets[0].label = newColumnName;
         }
         
@@ -830,7 +863,7 @@ async function runReportExecution(suggestion) {
         const result = await chat.sendMessage(summaryPrompt);
         const summary = result.response.text();
 
-        renderReport(suggestion.title, summary, chartConfig, aggregation ? aggregatedData : joinedData);
+        renderReport(suggestion.title, summary, chartConfig, finalUniformData);
 
     } catch (error) {
         updateProgress(`Report generation failed: ${error.message}`, true);
